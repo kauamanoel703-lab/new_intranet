@@ -1,0 +1,8 @@
+POST http://localhost:3001/api/usuarios
+Content-Type: application/json
+
+{
+  "nome": "João Teste",
+  "email": "joao@jucepe.pe.gov.br",
+  "senha": "123456"
+}
