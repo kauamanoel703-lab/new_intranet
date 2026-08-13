@@ -54,7 +54,7 @@ const Register = () => {
       setSuccessMsg(`Usuário cadastrado com sucesso! ID: ${response.id}`);
       setForm({ nome: '', email: '', senha: '', cpf: '', telefone: '' });
     } catch (error) {
-      setErrors({ geral: error.message || 'Erro ao cadastrar usuário' });
+      setErrors({ geral: 'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.' });
     } finally {
       setLoading(false);
     }
@@ -119,7 +119,6 @@ const Register = () => {
           placeholder="(00) 00000-0000"
           mask="telefone"
         />
-
         <Button type="submit" variant="primary" loading={loading} disabled={loading}>
           Cadastrar
         </Button>

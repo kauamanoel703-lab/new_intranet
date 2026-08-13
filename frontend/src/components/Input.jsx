@@ -1,49 +1,60 @@
 ﻿import React from 'react';
 
-const Input = ({ 
-  label, 
-  name, 
-  value, 
-  onChange, 
-  type = 'text', 
-  placeholder = '', 
-  mask, 
+const applyMask = (val, mask) => {
+  if (mask === 'cpf') {
+    return val
+      .replace(/\D/g, '')
+      .slice(0, 11)
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  }
+
+  if (mask === 'telefone') {
+    return val
+      .replace(/\D/g, '')
+      .slice(0, 11)
+      .replace(/(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{5})(\d{1,4})$/, '$1-$2');
+  }
+
+  if (mask === 'cnpj') {
+    return val
+      .replace(/\D/g, '')
+      .slice(0, 14)
+      .replace(/(\d{2})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1/$2')
+      .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+  }
+
+  if (mask === 'cep') {
+    return val
+      .replace(/\D/g, '')
+      .slice(0, 8)
+      .replace(/(\d{5})(\d{1,3})$/, '$1-$2');
+  }
+
+  return val;
+};
+
+const Input = ({
+  label,
+  name,
+  value,
+  onChange,
+  type = 'text',
+  placeholder = '',
+  mask,
   required = false,
-  error 
+  error
 }) => {
   const handleChange = (e) => {
-    let val = e.target.value;
+    let val = mask ? applyMask(e.target.value, mask) : e.target.value;
 
-    if (mask) {
-      if (mask === 'cpf') {
-        val = val
-          .replace(/\D/g, '')
-          .replace(/(\d{3})(\d)/, '.')
-          .replace(/(\d{3})(\d)/, '.')
-          .replace(/(\d{3})(\d{1,2})$/, '-');
-      }
-      else if (mask === 'telefone') {
-        val = val
-          .replace(/\D/g, '')
-          .replace(/(\d{2})(\d)/, '() ')
-          .replace(/(\d{5})(\d)/, '-')
-          .replace(/(-\d{4})\d+?$/, '');
-      }
-      else if (mask === 'cnpj') {
-        val = val
-          .replace(/\D/g, '')
-          .replace(/(\d{2})(\d)/, '.')
-          .replace(/(\d{3})(\d)/, '.')
-          .replace(/(\d{3})(\d)/, '/')
-          .replace(/(\d{4})(\d)/, '-')
-          .replace(/(-\d{2})\d+?$/, '');
-      }
-      else if (mask === 'cep') {
-        val = val
-          .replace(/\D/g, '')
-          .replace(/(\d{5})(\d)/, '-')
-          .replace(/(-\d{3})\d+?$/, '');
-      }
+    // Limita senha a 6 caracteres
+    if (type === 'password') {
+      val = val.slice(0, 6);
     }
 
     onChange(name, val);
