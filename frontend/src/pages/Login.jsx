@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom'; // 1. Importe o useNavigate
+import { useAuth } from '../contexts/AuthContext'; // 2. Importe o useAuth
 import Input from '../components/Input';
 import Button from '../components/Button';
 import { loginUsuario } from '../services/api';
@@ -8,6 +10,9 @@ const Login = () => {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
+  const navigate = useNavigate(); // Hook do React Router para navegação
+  const { login } = useAuth();    // Função do nosso contexto atualizado
+
   const handleChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
     if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
@@ -15,8 +20,8 @@ const Login = () => {
 
   const validate = () => {
     const newErrors = {};
-    if (!form.email) newErrors.email = 'Email é obrigatório';
-    if (!form.senha) newErrors.senha = 'Senha é obrigatória';
+    if (!form.email.trim()) newErrors.email = 'Email é obrigatório';
+    if (!form.senha.trim()) newErrors.senha = 'Senha é obrigatória';
     return newErrors;
   };
 
@@ -29,15 +34,16 @@ const Login = () => {
     }
 
     setLoading(true);
+    setErrors({});
+
     try {
       const response = await loginUsuario(form);
 
-      // Salva o token e dados do usuário no localStorage
-      localStorage.setItem('token', response.token);
-      localStorage.setItem('usuario', JSON.stringify(response.usuario));
+      // Salva no contexto e no localStorage de uma só vez
+      login(response.usuario, response.token);
 
-      // Redireciona para o dashboard (vamos criar depois)
-      window.location.href = '/dashboard';
+      // Redireciona via SPA (sem dar F5 na tela)
+      navigate('/dashboard');
 
     } catch (error) {
       setErrors({ geral: error.message || 'Erro ao fazer login' });
@@ -47,8 +53,11 @@ const Login = () => {
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '80px auto', padding: '20px' }}>
-      <h1>Login — JUCEPE</h1>
+    <div style={{ maxWidth: '500px', margin: '80px auto', padding: '20px' }}>
+      <h1 style={{ marginBottom: '5px' }}>Login — JUCEPE</h1>
+      <p style={{ color: '#666', marginBottom: '20px', fontSize: '14px' }}>
+        Entre com suas credenciais para acessar o sistema.
+      </p>
 
       {errors.geral && (
         <div style={{ backgroundColor: '#f8d7da', color: '#721c24', padding: '10px', borderRadius: '4px', marginBottom: '16px' }}>

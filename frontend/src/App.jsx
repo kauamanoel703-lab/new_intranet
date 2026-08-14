@@ -3,11 +3,22 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Dashboard from './pages/Dashboard';
+import Usuarios from './pages/Usuarios';
 
-// Componente que protege rotas: redireciona para /login se não autenticado
+// Componente de Rota Protegida com depuração
 const PrivateRoute = ({ children }) => {
-  const { isAutenticado } = useAuth();
-  return isAutenticado ? children : <Navigate to="/login" />;
+  const { isAutenticado, usuario } = useAuth();
+
+  console.log("🔍 [PrivateRoute] Verificando acesso:", { isAutenticado, usuario });
+
+  if (!isAutenticado) {
+    console.warn("⚠️ [PrivateRoute] Acesso negado! Redirecionando para /login...");
+    return <Navigate to="/login" replace />;
+  }
+
+  console.log("✅ [PrivateRoute] Acesso liberado!");
+  return children;
 };
 
 function App() {
@@ -15,22 +26,27 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Rotas públicas */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-
-          {/* Rota protegida — só entra autenticado */}
-          <Route
-            path="/dashboard"
+          <Route 
+            path="/dashboard" 
             element={
               <PrivateRoute>
-                <div><h1>Dashboard (em construção)</h1></div>
+                <Dashboard />
               </PrivateRoute>
-            }
+            } 
           />
-
-          {/* Redireciona a raiz para /login */}
-          <Route path="/" element={<Navigate to="/login" />} />
+          <Route 
+            path="/usuarios" 
+            element={
+              <PrivateRoute>
+                <Usuarios />
+              </PrivateRoute>
+            } 
+          />
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          {/* Rota coringa para capturar qualquer caminho inexistente e evitar tela branca */}
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

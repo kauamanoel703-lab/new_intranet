@@ -1,59 +1,64 @@
-﻿const API_URL = 'http://localhost:3001/api';
+﻿// src/services/api.js
+const BASE_URL = 'http://localhost:3001/api/usuarios';
 
-// Pega o token salvo no localStorage (se existir)
-const getToken = () => localStorage.getItem('token');
-
-// ─── CADASTRO ────────────────────────────────────────────────────────────────
-export const cadastrarUsuario = async (dados) => {
-  const response = await fetch(`${API_URL}/usuarios`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(dados)
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.erro || 'Erro ao cadastrar');
+// Helper privado para tratar respostas HTTP
+const tratarResposta = async (resposta) => {
+  const contentType = resposta.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    const textoErro = await resposta.text();
+    console.error('Erro (não JSON):', textoErro);
+    throw new Error('Servidor fora do ar ou rota inexistente.');
   }
-  return response.json();
+
+  const data = await resposta.json();
+  if (!resposta.ok) throw new Error(data.erro || 'Erro na requisição');
+  return data;
 };
 
-// ─── LOGIN ───────────────────────────────────────────────────────────────────
+// 1. Login
 export const loginUsuario = async (dados) => {
-  const response = await fetch(`${API_URL}/auth/login`, {
+  const resposta = await fetch(`${BASE_URL}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(dados)
+    body: JSON.stringify(dados),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.erro || 'Erro ao fazer login');
-  }
-  return response.json();
+  return tratarResposta(resposta);
 };
 
-// ─── REQUISIÇÃO AUTENTICADA (com token no header) ─────────────────────────────
-export const fetchAutenticado = async (endpoint, options = {}) => {
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${getToken()}`, // <-- o crachá JWT
-      ...options.headers
-    }
+// 2. Cadastro
+export const cadastrarUsuario = async (dados) => {
+  const resposta = await fetch(`${BASE_URL}/cadastrar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.erro || 'Erro na requisição');
-  }
-  return response.json();
+  return tratarResposta(resposta);
 };
 
-// ─── LOGOUT ──────────────────────────────────────────────────────────────────
-export const logout = () => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('usuario');
-  window.location.href = '/login';
+// 3. Listar Usuários (Que faltava para Usuarios.jsx)
+export const listarUsuarios = async () => {
+  const resposta = await fetch(`${BASE_URL}/listar`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  return tratarResposta(resposta);
+};
+
+// 4. Atualizar Usuário (Que faltava para Usuarios.jsx)
+export const atualizarUsuario = async (id, dados) => {
+  const resposta = await fetch(`${BASE_URL}/atualizar/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  });
+  return tratarResposta(resposta);
+};
+
+// 5. Deletar Usuário (Que faltava para Usuarios.jsx)
+export const deletarUsuario = async (id) => {
+  const resposta = await fetch(`${BASE_URL}/deletar/${id}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  return tratarResposta(resposta);
 };

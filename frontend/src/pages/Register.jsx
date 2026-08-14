@@ -25,8 +25,8 @@ const Register = () => {
 
   const validate = () => {
     const newErrors = {};
-    if (!form.nome) newErrors.nome = 'Nome é obrigatório';
-    if (!form.email) newErrors.email = 'Email é obrigatório';
+    if (!form.nome.trim()) newErrors.nome = 'Nome é obrigatório';
+    if (!form.email.trim()) newErrors.email = 'Email é obrigatório';
     if (!form.senha || form.senha.length < 6) {
       newErrors.senha = 'Senha deve ter pelo menos 6 caracteres';
     }
@@ -43,6 +43,7 @@ const Register = () => {
 
     setLoading(true);
     setSuccessMsg('');
+    setErrors({});
 
     try {
       const response = await cadastrarUsuario({
@@ -54,7 +55,7 @@ const Register = () => {
       setSuccessMsg(`Usuário cadastrado com sucesso! ID: ${response.id}`);
       setForm({ nome: '', email: '', senha: '', cpf: '', telefone: '' });
     } catch (error) {
-      setErrors({ geral: 'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.' });
+      setErrors({ geral: error.message || 'Erro inesperado ao conectar com o servidor.' });
     } finally {
       setLoading(false);
     }
@@ -74,51 +75,11 @@ const Register = () => {
         </div>
       )}
       <form onSubmit={handleSubmit}>
-        <Input
-          label="Nome completo"
-          name="nome"
-          value={form.nome}
-          onChange={handleChange}
-          placeholder="Digite seu nome"
-          required
-          error={errors.nome}
-        />
-        <Input
-          label="Email"
-          name="email"
-          value={form.email}
-          onChange={handleChange}
-          type="email"
-          placeholder="seu@email.com"
-          required
-          error={errors.email}
-        />
-        <Input
-          label="Senha"
-          name="senha"
-          value={form.senha}
-          onChange={handleChange}
-          type="password"
-          placeholder="Mínimo 6 caracteres"
-          required
-          error={errors.senha}
-        />
-        <Input
-          label="CPF"
-          name="cpf"
-          value={form.cpf}
-          onChange={handleChange}
-          placeholder="000.000.000-00"
-          mask="cpf"
-        />
-        <Input
-          label="Telefone"
-          name="telefone"
-          value={form.telefone}
-          onChange={handleChange}
-          placeholder="(00) 00000-0000"
-          mask="telefone"
-        />
+        <Input label="Nome completo" name="nome" value={form.nome} onChange={handleChange} placeholder="Digite seu nome" required error={errors.nome} />
+        <Input label="Email" name="email" value={form.email} onChange={handleChange} type="email" placeholder="seu@email.com" required error={errors.email} />
+        <Input label="Senha" name="senha" value={form.senha} onChange={handleChange} type="password" placeholder="Mínimo 6 caracteres" required error={errors.senha} />
+        <Input label="CPF" name="cpf" value={form.cpf} onChange={handleChange} placeholder="000.000.000-00" mask="cpf" />
+        <Input label="Telefone" name="telefone" value={form.telefone} onChange={handleChange} placeholder="(00) 00000-0000" mask="telefone" />
         <Button type="submit" variant="primary" loading={loading} disabled={loading}>
           Cadastrar
         </Button>

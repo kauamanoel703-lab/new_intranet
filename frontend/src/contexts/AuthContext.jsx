@@ -1,24 +1,34 @@
 import React, { createContext, useContext, useState } from 'react';
 
-// O contexto é como uma "variável global" do React
-// que qualquer componente pode ler sem precisar passar por props
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [usuario, setUsuario] = useState(() => {
-    // Tenta recuperar o usuário salvo no localStorage ao carregar a página
     const salvo = localStorage.getItem('usuario');
     return salvo ? JSON.parse(salvo) : null;
   });
 
-  const isAutenticado = !!usuario; // true se usuario não for null
+  // Função para realizar o login e atualizar o estado do React
+  const login = (dadosUsuario, token) => {
+    localStorage.setItem('token', token);
+    localStorage.setItem('usuario', JSON.stringify(dadosUsuario));
+    setUsuario(dadosUsuario);
+  };
+
+  // Função para deslogar
+  const logout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('usuario');
+    setUsuario(null);
+  };
+
+  const isAutenticado = !!usuario;
 
   return (
-    <AuthContext.Provider value={{ usuario, setUsuario, isAutenticado }}>
+    <AuthContext.Provider value={{ usuario, isAutenticado, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-// Hook para usar o contexto facilmente em qualquer componente
 export const useAuth = () => useContext(AuthContext);

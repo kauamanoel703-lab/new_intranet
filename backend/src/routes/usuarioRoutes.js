@@ -1,16 +1,14 @@
 ﻿const express = require('express');
-const UsuarioController = require('../controllers/UsuarioController');
-const { autenticar } = require('../middlewares/authMiddleware');
-
 const router = express.Router();
+const UsuarioController = require('../controllers/UsuarioController');
 
-// Rotas públicas (não precisam de token)
-router.post('/usuarios', UsuarioController.cadastrar);
-router.post('/auth/login', UsuarioController.login);
+// Rotas públicas (Cadastro e Login)
+router.post('/cadastrar', UsuarioController.cadastrar);
+router.post('/login', UsuarioController.login);
 
-// Exemplo de rota protegida (só entra com token válido)
-router.get('/usuarios/me', autenticar, (req, res) => {
-  res.json({ mensagem: 'Rota protegida!', usuario: req.usuario });
-});
+// Rotas protegidas (serão usadas com o token JWT)
+router.get('/listar', UsuarioController.listar);
+router.put('/atualizar/:id', UsuarioController.atualizar);
+router.delete('/deletar/:id', UsuarioController.deletar);
 
 module.exports = router;
