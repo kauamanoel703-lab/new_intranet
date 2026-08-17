@@ -74,45 +74,52 @@ export default function Processos() {
     }
   };
 
-  // Renderização do Badge de Status
-  const renderStatusBadge = (status) => {
-    const isAprovado = status === 'Aprovado';
-    const isExigencia = status === 'Com Exigência';
-    const isIndeferido = status === 'Indeferido';
+  // Alterar Status do Processo
+  const handleAlterarStatus = async (id, novoStatus) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:3000/processos/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: novoStatus })
+      });
 
-    let bgColor = '#1e3a8a';
-    let textColor = '#93c5fd';
-    let borderColor = '#1d4ed8';
-
-    if (isAprovado) {
-      bgColor = '#064e3b';
-      textColor = '#6ee7b7';
-      borderColor = '#047857';
-    } else if (isExigencia) {
-      bgColor = '#78350f';
-      textColor = '#fde68a';
-      borderColor = '#b45309';
-    } else if (isIndeferido) {
-      bgColor = '#7f1d1d';
-      textColor = '#fca5a5';
-      borderColor = '#b91c1c';
+      if (response.ok) {
+        carregarProcessos();
+      } else {
+        alert('Erro ao atualizar o status do processo.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao conectar ao servidor para atualização.');
     }
+  };
 
-    return (
-      <span style={{
-        display: 'inline-block',
-        padding: '6px 14px',
-        borderRadius: '20px',
-        fontSize: '12px',
-        fontWeight: '600',
-        letterSpacing: '0.03em',
-        backgroundColor: bgColor,
-        color: textColor,
-        border: `1px solid ${borderColor}`
-      }}>
-        {status}
-      </span>
-    );
+  // Excluir Processo
+  const handleExcluir = async (id) => {
+    if (!window.confirm('Tem certeza que deseja remover este processo?')) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:3000/processos/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        carregarProcessos();
+      } else {
+        alert('Erro ao excluir o processo.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao conectar ao servidor para exclusão.');
+    }
   };
 
   return (
@@ -123,10 +130,10 @@ export default function Processos() {
       fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
     }}>
       
-      {/* CABEÇALHO COM ESPAÇAMENTO E TIPOGRAFIA PROFISSIONAL */}
+      {/* CABEÇALHO */}
       <div style={{
         display: 'flex',
-        justify: 'space-between',
+        justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: '36px',
         paddingBottom: '24px',
@@ -224,12 +231,13 @@ export default function Processos() {
                 <th style={{ padding: '16px 24px' }}>Requerente</th>
                 <th style={{ padding: '16px 24px' }}>Data</th>
                 <th style={{ padding: '16px 24px' }}>Status</th>
+                <th style={{ padding: '16px 24px', textAlign: 'center' }}>Ações</th>
               </tr>
             </thead>
             <tbody>
               {processos.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ padding: '40px 24px', textAlign: 'center', color: '#64748b', fontSize: '14px' }}>
+                  <td colSpan="7" style={{ padding: '40px 24px', textAlign: 'center', color: '#64748b', fontSize: '14px' }}>
                     Nenhum processo cadastrado até o momento.
                   </td>
                 </tr>
@@ -252,7 +260,50 @@ export default function Processos() {
                       {proc.data}
                     </td>
                     <td style={{ padding: '18px 24px' }}>
-                      {renderStatusBadge(proc.status)}
+                      <select
+                        value={proc.status}
+                        onChange={(e) => handleAlterarStatus(proc.id, e.target.value)}
+                        style={{
+                          backgroundColor: 
+                            proc.status === 'Aprovado' || proc.status === 'Deferido' ? '#064e3b' :
+                            proc.status === 'Com Exigência' ? '#78350f' :
+                            proc.status === 'Indeferido' ? '#7f1d1d' : '#1e3a8a',
+                          color: 
+                            proc.status === 'Aprovado' || proc.status === 'Deferido' ? '#6ee7b7' :
+                            proc.status === 'Com Exigência' ? '#fde68a' :
+                            proc.status === 'Indeferido' ? '#fca5a5' : '#93c5fd',
+                          border: '1px solid #334155',
+                          borderRadius: '20px',
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          outline: 'none'
+                        }}
+                      >
+                        <option value="Em Análise">Em Análise</option>
+                        <option value="Aprovado">Aprovado</option>
+                        <option value="Com Exigência">Com Exigência</option>
+                        <option value="Indeferido">Indeferido</option>
+                      </select>
+                    </td>
+                    <td style={{ padding: '18px 24px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => handleExcluir(proc.id)}
+                        style={{
+                          backgroundColor: 'transparent',
+                          color: '#f87171',
+                          border: '1px solid #7f1d1d',
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        Excluir
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -274,7 +325,7 @@ export default function Processos() {
           backdropFilter: 'blur(4px)',
           display: 'flex',
           alignItems: 'center',
-          justify: 'center',
+          justifyContent: 'center',
           zIndex: 1000
         }}>
           <div style={{

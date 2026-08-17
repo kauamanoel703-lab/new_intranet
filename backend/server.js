@@ -9,12 +9,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Configuração da Conexão com o Banco de Dados MySQL (phpMyAdmin)
+// Configuração da Conexão com o Banco de Dados MySQL
 const db = mysql.createPool({
   host: 'localhost',
-  user: 'root',      // Ajuste para o seu usuário do MySQL, se necessário
-  password: '',      // Coloque sua senha do MySQL, se houver
-  database: 'intranet_jucepe'
+  user: 'root',
+  password: '',
+  database: 'jucepe_infranet'
 });
 
 // Chave secreta para geração do token JWT
@@ -38,6 +38,37 @@ const autenticarToken = (req, res, next) => {
   });
 };
 
+// ==================== ROTA DE CADASTRO DE USUÁRIO ====================
+
+app.post('/register', async (req, res) => {
+  const { nome, email, senha, cpf, telefone } = req.body;
+
+  if (!nome || !email || !senha) {
+    return res.status(400).json({ mensagem: 'Preencha os campos obrigatórios: nome, email e senha.' });
+  }
+
+  try {
+    const [usuarioExistente] = await db.query('SELECT id FROM usuarios WHERE email = ?', [email]);
+    if (usuarioExistente.length > 0) {
+      return res.status(400).json({ mensagem: 'Este e-mail já está cadastrado no sistema.' });
+    }
+
+    const [result] = await db.query(
+      'INSERT INTO usuarios (nome, email, senha, cpf, telefone) VALUES (?, ?, ?, ?, ?)',
+      [nome, email, senha, cpf || null, telefone || null]
+    );
+
+    res.status(201).json({
+      mensagem: 'Usuário cadastrado com sucesso!',
+      id: result.insertId
+    });
+
+  } catch (error) {
+    console.error('Erro ao cadastrar usuário:', error);
+    res.status(500).json({ mensagem: 'Erro interno no servidor ao tentar realizar cadastro.' });
+  }
+});
+
 // ==================== ROTA DE AUTENTICAÇÃO (LOGIN) ====================
 
 app.post('/login', async (req, res) => {
@@ -48,21 +79,14 @@ app.post('/login', async (req, res) => {
   }
 
   try {
-    // Consulta a tabela 'usuarios' no banco intranet_jucepe
     const [rows] = await db.query('SELECT * FROM usuarios WHERE email = ?', [email]);
 
-    if (rows.length === 0) {
+    if (rows.length === 0 || rows[0].senha !== senha) {
       return res.status(401).json({ mensagem: 'E-mail ou senha incorretos.' });
     }
 
     const usuario = rows[0];
 
-    // Validação de senha
-    if (usuario.senha !== senha) {
-      return res.status(401).json({ mensagem: 'E-mail ou senha incorretos.' });
-    }
-
-    // Gerar token de acesso
     const token = jwt.sign(
       { id: usuario.id, nome: usuario.nome || 'Usuário', email: usuario.email },
       JWT_SECRET,
@@ -85,13 +109,48 @@ app.post('/login', async (req, res) => {
   }
 });
 
+// ==================== ROTA DE MÉTRICAS DO DASHBOARD ====================
+
+app.get('/dashboard/metricas', autenticarToken, async (req, res) => {
+  try {
+    const [totalRows] = await db.query('SELECT COUNT(*) AS total FROM processos');
+    const [emAnaliseRows] = await db.query('SELECT COUNT(*) AS total FROM processos WHERE status = "Em Análise"');
+    const [aprovadosRows] = await db.query('SELECT COUNT(*) AS total FROM processos WHERE status IN ("Aprovado", "Deferido", "Concluído")');
+    const [exigenciaRows] = await db.query('SELECT COUNT(*) AS total FROM processos WHERE status = "Com Exigência"');
+    const [indeferidosRows] = await db.query('SELECT COUNT(*) AS total FROM processos WHERE status = "Indeferido"');
+
+    res.json({
+      total: totalRows[0].total,
+      emAnalise: emAnaliseRows[0].total,
+      aprovados: aprovadosRows[0].total,
+      exigencia: exigenciaRows[0].total,
+      indeferidos: indeferidosRows[0].total
+    });
+  } catch (error) {
+    console.error('Erro ao carregar métricas:', error);
+    res.status(500).json({ mensagem: 'Erro ao buscar métricas do dashboard.' });
+  }
+});
+
 // ==================== ROTAS DE PROCESSOS ====================
 
 // Listar todos os processos
 app.get('/processos', autenticarToken, async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM processos ORDER BY id DESC');
-    res.json(rows);
+    // Busca os dados e tenta formatar a data diretamente no MySQL para DD/MM/YYYY
+    // Caso a coluna "data" seja VARCHAR, a formatação DATE_FORMAT retornará null, então usamos um fallback
+    const [rows] = await db.query(`
+      SELECT *, DATE_FORMAT(data, '%d/%m/%Y') AS dataFormatada 
+      FROM processos 
+      ORDER BY id DESC
+    `);
+    
+    const processosAjustados = rows.map(p => ({
+      ...p,
+      data: p.dataFormatada || p.data // Retorna bonitinho pro frontend
+    }));
+
+    res.json(processosAjustados);
   } catch (error) {
     console.error('Erro ao listar processos:', error);
     res.status(500).json({ mensagem: 'Erro ao buscar processos no banco de dados.' });
@@ -107,13 +166,17 @@ app.post('/processos', autenticarToken, async (req, res) => {
   }
 
   const numeroProtocolo = numero || `JUC-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-  const dataHoje = new Date().toLocaleDateString('pt-BR');
+  
+  // ATENÇÃO: Gera a data no formato YYYY-MM-DD aceito pelo MySQL
+  const dataHoje = new Date().toISOString().split('T')[0]; 
+  
   const statusInicial = status || 'Em Análise';
+  const nomeRequerente = requerente || req.usuario?.nome || 'Usuário';
 
   try {
     const [result] = await db.query(
       'INSERT INTO processos (numero, empresa, tipo, requerente, data, status) VALUES (?, ?, ?, ?, ?, ?)',
-      [numeroProtocolo, empresa, tipo, requerente || req.usuario?.nome || 'Usuário', dataHoje, statusInicial]
+      [numeroProtocolo, empresa, tipo, nomeRequerente, dataHoje, statusInicial]
     );
 
     res.status(201).json({
@@ -122,13 +185,16 @@ app.post('/processos', autenticarToken, async (req, res) => {
       numero: numeroProtocolo,
       empresa,
       tipo,
-      requerente: requerente || req.usuario?.nome || 'Usuário',
-      data: dataHoje,
+      requerente: nomeRequerente,
+      data: new Date().toLocaleDateString('pt-BR'), // Envia formatado na resposta
       status: statusInicial
     });
   } catch (error) {
-    console.error('Erro ao cadastrar processo:', error);
-    res.status(500).json({ mensagem: 'Erro ao salvar o processo no banco de dados.' });
+    console.error('Erro ao cadastrar processo no MySQL:', error);
+    // Agora o frontend e o Postman verão o erro exato que o MySQL jogou!
+    res.status(500).json({ 
+      mensagem: `Erro no banco de dados: ${error.message}` 
+    });
   }
 });
 
@@ -152,6 +218,24 @@ app.put('/processos/:id', autenticarToken, async (req, res) => {
   } catch (error) {
     console.error('Erro ao atualizar processo:', error);
     res.status(500).json({ mensagem: 'Erro ao atualizar o processo no banco.' });
+  }
+});
+
+// Excluir processo
+app.delete('/processos/:id', autenticarToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [result] = await db.query('DELETE FROM processos WHERE id = ?', [id]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ mensagem: 'Processo não encontrado.' });
+    }
+
+    res.json({ mensagem: 'Processo removido com sucesso!' });
+  } catch (error) {
+    console.error('Erro ao excluir processo:', error);
+    res.status(500).json({ mensagem: 'Erro ao remover processo do banco.' });
   }
 });
 

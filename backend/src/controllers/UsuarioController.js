@@ -1,4 +1,6 @@
-﻿const UsuarioModel = require('../models/UsuarioModel');
+﻿const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const UsuarioModel = require('../models/UsuarioModel');
 
 class UsuarioController {
   // POST /api/usuarios/cadastrar
@@ -10,8 +12,12 @@ class UsuarioController {
         return res.status(400).json({ erro: 'Todos os campos são obrigatórios' });
       }
 
-      // Em produção usaremos bcrypt para hash, por enquanto simulamos
-      const idInserido = await UsuarioModel.criar(nome, email, senha);
+      // Criptografa a senha antes de enviar ao Model
+      const saltRounds = 10;
+      const senhaHash = await bcrypt.hash(senha, saltRounds);
+
+      // Salva a hash gerada no banco de dados
+      const idInserido = await UsuarioModel.criar(nome, email, senhaHash);
       return res.status(201).json({ mensagem: 'Usuário criado com sucesso!', id: idInserido });
     } catch (error) {
       console.error(error);
@@ -29,14 +35,23 @@ class UsuarioController {
         return res.status(401).json({ erro: 'Credenciais inválidas' });
       }
 
-      // Comparação simples (trocaremos para bcrypt depois)
-      if (usuario.senha_hash !== senha) {
+      // Compara a senha informada com o hash armazenado
+      const senhaCorreta = await bcrypt.compare(senha, usuario.senha_hash);
+      if (!senhaCorreta) {
         return res.status(401).json({ erro: 'Credenciais inválidas' });
       }
 
+      // Assina o Token JWT real com dados do usuário e expiração
+      const secretKey = process.env.JWT_SECRET || 'jucepe_chave_secreta_dev';
+      const token = jwt.sign(
+        { id: usuario.id, role: usuario.role },
+        secretKey,
+        { expiresIn: '8h' }
+      );
+
       return res.json({
-        mensagem: 'Login realizado!',
-        token: 'token_de_teste_123', // Simulando JWT
+        mensagem: 'Login realizado com sucesso!',
+        token,
         usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, role: usuario.role }
       });
     } catch (error) {

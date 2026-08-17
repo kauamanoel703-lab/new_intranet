@@ -5,20 +5,35 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Usuarios from './pages/Usuarios';
-import Processos from './pages/Processos'; // 👈 Importado
+import Processos from './pages/Processos';
 
-// Componente de Rota Protegida com depuração
+// Rota Protegida (só entra se autenticado)
 const PrivateRoute = ({ children }) => {
-  const { isAutenticado, usuario } = useAuth();
+  const { isAutenticado, carregando } = useAuth();
 
-  console.log("🔍 [PrivateRoute] Verificando acesso:", { isAutenticado, usuario });
+  if (carregando) {
+    return <div style={{ color: '#fff', textAlign: 'center', marginTop: '50px' }}>Carregando sessão...</div>;
+  }
 
   if (!isAutenticado) {
-    console.warn("⚠️ [PrivateRoute] Acesso negado! Redirecionando para /login...");
     return <Navigate to="/login" replace />;
   }
 
-  console.log("✅ [PrivateRoute] Acesso liberado!");
+  return children;
+};
+
+// Rota Pública (se já estiver logado, manda direto pro Dashboard/Processos)
+const PublicRoute = ({ children }) => {
+  const { isAutenticado, carregando } = useAuth();
+
+  if (carregando) {
+    return <div style={{ color: '#fff', textAlign: 'center', marginTop: '50px' }}>Carregando sessão...</div>;
+  }
+
+  if (isAutenticado) {
+    return <Navigate to="/processos" replace />;
+  }
+
   return children;
 };
 
@@ -27,8 +42,23 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          {/* Rotas Públicas */}
+          <Route 
+            path="/login" 
+            element={
+              <PublicRoute>
+                <Login />
+              </PublicRoute>
+            } 
+          />
+          <Route 
+            path="/register" 
+            element={
+              <PublicRoute>
+                <Register />
+              </PublicRoute>
+            } 
+          />
           
           {/* Rotas Protegidas */}
           <Route 
@@ -56,9 +86,9 @@ function App() {
             } 
           />
 
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          {/* Rota coringa para capturar qualquer caminho inexistente e evitar tela branca */}
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          {/* Redirecionamentos padrão */}
+          <Route path="/" element={<Navigate to="/processos" replace />} />
+          <Route path="*" element={<Navigate to="/processos" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext'; // 👈 Importação do AuthContext
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -7,7 +9,9 @@ export default function Login() {
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
 
-  // Trava estrita para garantir NO MÁXIMO 6 caracteres
+  const navigate = useNavigate();
+  const { login } = useAuth(); // 👈 Puxa a função de login do Contexto
+
   const handleSenhaChange = (e) => {
     const valor = e.target.value;
     if (valor.length <= 6) {
@@ -31,7 +35,7 @@ export default function Login() {
 
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('A rota do servidor não retornou JSON. Verifique se o server.js está rodando e com a rota /login.');
+        throw new Error('A rota do servidor não retornou JSON. Verifique se o server.js está rodando.');
       }
 
       const data = await response.json();
@@ -40,12 +44,19 @@ export default function Login() {
         throw new Error(data.mensagem || 'E-mail ou senha inválidos.');
       }
 
-      localStorage.setItem('token', data.token);
-      window.location.href = '/processos';
+      // 👈 Atualiza o contexto global de autenticação (e/ou localStorage)
+      if (typeof login === 'function') {
+        login(data.token, data.usuario);
+      } else {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('usuario', JSON.stringify(data.usuario));
+      }
+
+      navigate('/processos');
 
     } catch (err) {
       if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
-        setErro('Não foi possível conectar ao servidor. Verifique se o backend está ligado na porta 3000.');
+        setErro('Não foi possível conectar ao servidor. Verifique se o backend está rodando na porta 3000.');
       } else if (err.message.includes('Unexpected token') || err.message.includes('JSON')) {
         setErro('Erro na resposta do servidor. Certifique-se de que a rota /login existe no server.js.');
       } else {
@@ -71,7 +82,6 @@ export default function Login() {
         padding: '32px',
         textAlign: 'center'
       }}>
-        {/* TÍTULO */}
         <h1 style={{
           color: '#ffffff',
           fontSize: '28px',
@@ -91,7 +101,6 @@ export default function Login() {
           Entre com suas credenciais para acessar o sistema.
         </p>
 
-        {/* CAIXA DE ERRO PT-BR */}
         {erro && (
           <div style={{
             backgroundColor: '#fee2e2',
@@ -109,7 +118,6 @@ export default function Login() {
         )}
 
         <form onSubmit={handleLogin} style={{ textAlign: 'left' }}>
-          {/* CAMPO DE E-MAIL */}
           <div style={{ marginBottom: '20px' }}>
             <label style={{
               display: 'block',
@@ -140,7 +148,6 @@ export default function Login() {
             />
           </div>
 
-          {/* CAMPO DE SENHA COM BLOQUEIO DE 6 DÍGITOS E VISOR (OLHINHO) */}
           <div style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <label style={{ color: '#ffffff', fontSize: '14px', fontWeight: '600' }}>
@@ -173,7 +180,6 @@ export default function Login() {
                 }}
               />
 
-              {/* BOTÃO DO OLHINHO / VISOR DE SENHA */}
               <button
                 type="button"
                 onClick={() => setMostrarSenha(!mostrarSenha)}
@@ -193,13 +199,11 @@ export default function Login() {
                 }}
               >
                 {mostrarSenha ? (
-                  /* Ícone Olho Fechado (Com Risco) */
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
                     <line x1="1" y1="1" x2="23" y2="23"></line>
                   </svg>
                 ) : (
-                  /* Ícone Olho Aberto */
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                     <circle cx="12" cy="12" r="3"></circle>
@@ -235,7 +239,7 @@ export default function Login() {
           color: '#94a3b8',
           fontSize: '14px'
         }}>
-          Não tem conta? <a href="/cadastro" style={{ color: '#818cf8', textDecoration: 'underline' }}>Cadastre-se</a>
+          Não tem conta? <Link to="/register" style={{ color: '#818cf8', textDecoration: 'underline' }}>Cadastre-se</Link>
         </p>
       </div>
     </div>
