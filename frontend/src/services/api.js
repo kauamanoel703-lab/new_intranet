@@ -1,59 +1,103 @@
-﻿const API_URL = 'http://localhost:3001/api';
+﻿const BASE_URL = 'http://localhost:3001/api';
 
-// Pega o token salvo no localStorage (se existir)
-const getToken = () => localStorage.getItem('token');
-
-// ─── CADASTRO ────────────────────────────────────────────────────────────────
-export const cadastrarUsuario = async (dados) => {
-  const response = await fetch(`${API_URL}/usuarios`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(dados)
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.erro || 'Erro ao cadastrar');
-  }
-  return response.json();
+const obterCabecalho = () => {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  };
 };
 
-// ─── LOGIN ───────────────────────────────────────────────────────────────────
+const tratarResposta = async (resposta) => {
+  const contentType = resposta.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    const textoErro = await resposta.text();
+    throw new Error(textoErro || 'Erro de comunicação com o servidor.');
+  }
+  const data = await resposta.json();
+  if (!resposta.ok) throw new Error(data.mensagem || 'Erro na requisição');
+  return data;
+};
+
+// ==================== AUTENTICAÇÃO ====================
+
 export const loginUsuario = async (dados) => {
-  const response = await fetch(`${API_URL}/auth/login`, {
+  const resposta = await fetch(`${BASE_URL}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(dados)
+    body: JSON.stringify(dados),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.erro || 'Erro ao fazer login');
-  }
-  return response.json();
+  return tratarResposta(resposta);
 };
 
-// ─── REQUISIÇÃO AUTENTICADA (com token no header) ─────────────────────────────
-export const fetchAutenticado = async (endpoint, options = {}) => {
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${getToken()}`, // <-- o crachá JWT
-      ...options.headers
-    }
+export const cadastrarUsuario = async (dados) => {
+  const resposta = await fetch(`${BASE_URL}/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.erro || 'Erro na requisição');
-  }
-  return response.json();
+  return tratarResposta(resposta);
 };
 
-// ─── LOGOUT ──────────────────────────────────────────────────────────────────
-export const logout = () => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('usuario');
-  window.location.href = '/login';
+// ==================== USUÁRIOS ====================
+
+export const listarUsuarios = async () => {
+  const resposta = await fetch(`${BASE_URL}/usuarios`, {
+    method: 'GET',
+    headers: obterCabecalho(),
+  });
+  return tratarResposta(resposta);
+};
+
+export const atualizarUsuario = async (id, dados) => {
+  const resposta = await fetch(`${BASE_URL}/usuarios/${id}`, {
+    method: 'PUT',
+    headers: obterCabecalho(),
+    body: JSON.stringify(dados),
+  });
+  return tratarResposta(resposta);
+};
+
+export const deletarUsuario = async (id) => {
+  const resposta = await fetch(`${BASE_URL}/usuarios/${id}`, {
+    method: 'DELETE',
+    headers: obterCabecalho(),
+  });
+  return tratarResposta(resposta);
+};
+
+// ==================== PROCESSOS ====================
+
+export const listarProcessos = async () => {
+  const resposta = await fetch(`${BASE_URL}/processos`, {
+    method: 'GET',
+    headers: obterCabecalho(),
+  });
+  return tratarResposta(resposta);
+};
+
+export const cadastrarProcesso = async (dados) => {
+  const resposta = await fetch(`${BASE_URL}/processos`, {
+    method: 'POST',
+    headers: obterCabecalho(),
+    body: JSON.stringify(dados),
+  });
+  return tratarResposta(resposta);
+};
+
+export const atualizarProcesso = async (id, dados) => {
+  const resposta = await fetch(`${BASE_URL}/processos/${id}`, {
+    method: 'PUT',
+    headers: obterCabecalho(),
+    body: JSON.stringify(dados),
+  });
+  return tratarResposta(resposta);
+};
+
+export const deletarProcesso = async (id) => {
+  const resposta = await fetch(`${BASE_URL}/processos/${id}`, {
+    method: 'DELETE',
+    headers: obterCabecalho(),
+  });
+  return tratarResposta(resposta);
 };

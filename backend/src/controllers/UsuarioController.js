@@ -1,10 +1,9 @@
-﻿const UsuarioModel = require('../models/UsuarioModel');
-const bcrypt = require('bcrypt');
+﻿const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const UsuarioModel = require('../models/UsuarioModel');
 
 class UsuarioController {
-
-  // ─── CADASTRO (já existia) ───────────────────────────────────────────
+  // POST /api/usuarios/cadastrar
   static async cadastrar(req, res) {
     try {
       const { nome, email, senha } = req.body;
@@ -13,65 +12,87 @@ class UsuarioController {
         return res.status(400).json({ erro: 'Todos os campos são obrigatórios' });
       }
 
-      const usuarioExistente = await UsuarioModel.buscarPorEmail(email);
-      if (usuarioExistente) {
-        return res.status(409).json({ erro: 'Email já cadastrado' });
-      }
+      // Criptografa a senha antes de enviar ao Model
+      const saltRounds = 10;
+      const senhaHash = await bcrypt.hash(senha, saltRounds);
 
-      const senhaHash = await bcrypt.hash(senha, 10);
-      const id = await UsuarioModel.criar(nome, email, senhaHash);
-
-      res.status(201).json({ id, nome, email, mensagem: 'Usuário cadastrado com sucesso' });
+      // Salva a hash gerada no banco de dados
+      const idInserido = await UsuarioModel.criar(nome, email, senhaHash);
+      return res.status(201).json({ mensagem: 'Usuário criado com sucesso!', id: idInserido });
     } catch (error) {
-      console.error('Erro no cadastro:', error);
-      res.status(500).json({ erro: 'Erro interno do servidor' });
+      console.error(error);
+      return res.status(500).json({ erro: 'Erro interno ao cadastrar usuário' });
     }
   }
 
-  // ─── LOGIN (novo) ────────────────────────────────────────────────────
+  // POST /api/usuarios/login
   static async login(req, res) {
     try {
       const { email, senha } = req.body;
-
-      // 1. Valida se os campos vieram
-      if (!email || !senha) {
-        return res.status(400).json({ erro: 'Email e senha são obrigatórios' });
-      }
-
-      // 2. Busca o usuário no banco
       const usuario = await UsuarioModel.buscarPorEmail(email);
+
       if (!usuario) {
-        // Mensagem genérica por segurança (não revela se o email existe)
         return res.status(401).json({ erro: 'Credenciais inválidas' });
       }
 
-      // 3. Compara a senha digitada com o hash salvo no banco
-      const senhaValida = await bcrypt.compare(senha, usuario.senha_hash);
-      if (!senhaValida) {
+      // Compara a senha informada com o hash armazenado
+      const senhaCorreta = await bcrypt.compare(senha, usuario.senha_hash);
+      if (!senhaCorreta) {
         return res.status(401).json({ erro: 'Credenciais inválidas' });
       }
 
-      // 4. Gera o token JWT (válido por 8 horas)
+      // Assina o Token JWT real com dados do usuário e expiração
+      const secretKey = process.env.JWT_SECRET || 'jucepe_chave_secreta_dev';
       const token = jwt.sign(
-        { id: usuario.id, email: usuario.email, role: usuario.role },
-        process.env.JWT_SECRET,
+        { id: usuario.id, role: usuario.role },
+        secretKey,
         { expiresIn: '8h' }
       );
 
-      // 5. Retorna o token e dados básicos do usuário
-      res.json({
+      return res.json({
+        mensagem: 'Login realizado com sucesso!',
         token,
-        usuario: {
-          id: usuario.id,
-          nome: usuario.nome,
-          email: usuario.email,
-          role: usuario.role
-        }
+        usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, role: usuario.role }
       });
-
     } catch (error) {
-      console.error('Erro no login:', error);
-      res.status(500).json({ erro: 'Erro interno do servidor' });
+      console.error(error);
+      return res.status(500).json({ erro: 'Erro interno ao realizar login' });
+    }
+  }
+
+  // GET /api/usuarios/listar
+  static async listar(req, res) {
+    try {
+      const usuarios = await UsuarioModel.listarTodos();
+      return res.json(usuarios);
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ erro: 'Erro ao listar usuários' });
+    }
+  }
+
+  // PUT /api/usuarios/atualizar/:id
+  static async atualizar(req, res) {
+    try {
+      const { id } = req.params;
+      const { nome, email, role } = req.body;
+      await UsuarioModel.atualizar(id, nome, email, role);
+      return res.json({ mensagem: 'Usuário atualizado com sucesso!' });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ erro: 'Erro ao atualizar usuário' });
+    }
+  }
+
+  // DELETE /api/usuarios/deletar/:id
+  static async deletar(req, res) {
+    try {
+      const { id } = req.params;
+      await UsuarioModel.deletar(id);
+      return res.json({ mensagem: 'Usuário removido com sucesso!' });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ erro: 'Erro ao deletar usuário' });
     }
   }
 }
