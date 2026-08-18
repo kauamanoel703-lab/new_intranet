@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext'; // 👈 Importação do AuthContext
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -10,7 +10,7 @@ export default function Login() {
   const [carregando, setCarregando] = useState(false);
 
   const navigate = useNavigate();
-  const { login } = useAuth(); // 👈 Puxa a função de login do Contexto
+  const { login } = useAuth();
 
   const handleSenhaChange = (e) => {
     const valor = e.target.value;
@@ -25,7 +25,8 @@ export default function Login() {
     setCarregando(true);
 
     try {
-      const response = await fetch('http://localhost:3000/login', {
+      // Ajustado para a porta 3001 e rota /api/login
+      const response = await fetch('http://localhost:3001/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -35,7 +36,7 @@ export default function Login() {
 
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('A rota do servidor não retornou JSON. Verifique se o server.js está rodando.');
+        throw new Error('A rota do servidor não retornou JSON. Verifique se o server.js está rodando na porta 3001.');
       }
 
       const data = await response.json();
@@ -44,11 +45,13 @@ export default function Login() {
         throw new Error(data.mensagem || 'E-mail ou senha inválidos.');
       }
 
-      // 👈 Atualiza o contexto global de autenticação (e/ou localStorage)
+      // Salva os dados na sessão
       if (typeof login === 'function') {
         login(data.token, data.usuario);
-      } else {
-        localStorage.setItem('token', data.token);
+      }
+      
+      localStorage.setItem('token', data.token);
+      if (data.usuario) {
         localStorage.setItem('usuario', JSON.stringify(data.usuario));
       }
 
@@ -56,9 +59,9 @@ export default function Login() {
 
     } catch (err) {
       if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
-        setErro('Não foi possível conectar ao servidor. Verifique se o backend está rodando na porta 3000.');
+        setErro('Não foi possível conectar ao servidor. Verifique se o backend está rodando na porta 3001.');
       } else if (err.message.includes('Unexpected token') || err.message.includes('JSON')) {
-        setErro('Erro na resposta do servidor. Certifique-se de que a rota /login existe no server.js.');
+        setErro('Erro na resposta do servidor. Certifique-se de que a rota /api/login existe no server.js.');
       } else {
         setErro(err.message || 'Ocorreu um erro ao realizar o login.');
       }

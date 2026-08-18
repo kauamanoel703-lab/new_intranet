@@ -84,7 +84,8 @@ export default function Register() {
     setErrors({});
 
     try {
-      const response = await fetch('http://localhost:3000/register', {
+      // Porta atualizada para 3001
+      const response = await fetch('http://localhost:3001/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -100,7 +101,7 @@ export default function Register() {
 
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('O servidor não retornou JSON. Verifique se o server.js está rodando.');
+        throw new Error('O servidor não retornou JSON. Verifique se o server.js está rodando na porta 3001.');
       }
 
       const data = await response.json();
@@ -116,7 +117,7 @@ export default function Register() {
 
     } catch (error) {
       if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
-        setErrors({ geral: 'Servidor offline! Ligue o backend com "node server.js" na porta 3000.' });
+        setErrors({ geral: 'Servidor offline! Ligue o backend com "node server.js" na porta 3001.' });
       } else {
         setErrors({ geral: error.message || 'Erro inesperado ao conectar com o servidor.' });
       }

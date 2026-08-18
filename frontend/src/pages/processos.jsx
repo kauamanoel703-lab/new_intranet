@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { listarProcessos, cadastrarProcesso, atualizarProcesso, deletarProcesso } from '../services/api';
 
 export default function Processos() {
   const [processos, setProcessos] = useState([]);
@@ -11,31 +12,22 @@ export default function Processos() {
   const [tipo, setTipo] = useState('Abertura de Empresa');
   const [requerente, setRequerente] = useState('');
 
+  // Limpeza completa da sessão e redirecionamento limpo
+  const handleSessaoExpirada = () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.href = '/login';
+  };
+
   // Buscar processos do Backend
   const carregarProcessos = async () => {
     setCarregando(true);
     setErro('');
     try {
-      const token = localStorage.getItem('token');
-
-      const response = await fetch('http://localhost:3000/processos', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          throw new Error('Sessão expirada. Por favor, faça login novamente para continuar.');
-        }
-        throw new Error('Não foi possível conectar ao servidor de banco de dados.');
-      }
-
-      const data = await response.json();
+      const data = await listarProcessos();
       setProcessos(data);
     } catch (err) {
       setErro(err.message || 'Falha ao carregar a lista de processos.');
-      console.error('Detalhes da requisição:', err);
     } finally {
       setCarregando(false);
     }
@@ -49,76 +41,49 @@ export default function Processos() {
   const handleCadastrar = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
-
-      const response = await fetch('http://localhost:3000/processos', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ empresa, tipo, requerente })
-      });
-
-      if (response.ok) {
-        setEmpresa('');
-        setRequerente('');
-        setModalAberto(false);
-        carregarProcessos();
-      } else {
-        alert('Erro ao cadastrar o processo. Verifique os dados informados.');
-      }
+      await cadastrarProcesso({ empresa, tipo, requerente });
+      setEmpresa('');
+      setRequerente('');
+      setModalAberto(false);
+      carregarProcessos();
     } catch (err) {
-      console.error(err);
-      alert('Erro de comunicação com o servidor backend.');
+      alert(err.message || 'Erro ao cadastrar o processo. Verifique os dados informados.');
     }
   };
 
   // Alterar Status do Processo
   const handleAlterarStatus = async (id, novoStatus) => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:3000/processos/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ status: novoStatus })
-      });
-
-      if (response.ok) {
-        carregarProcessos();
-      } else {
-        alert('Erro ao atualizar o status do processo.');
-      }
+      await atualizarProcesso(id, { status: novoStatus });
+      carregarProcessos();
     } catch (err) {
-      console.error(err);
-      alert('Erro ao conectar ao servidor para atualização.');
+      alert(err.message || 'Erro ao atualizar o status do processo.');
     }
   };
 
   // Excluir Processo
   const handleExcluir = async (id) => {
     if (!window.confirm('Tem certeza que deseja remover este processo?')) return;
-
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:3000/processos/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        carregarProcessos();
-      } else {
-        alert('Erro ao excluir o processo.');
-      }
+      await deletarProcesso(id);
+      carregarProcessos();
     } catch (err) {
-      console.error(err);
-      alert('Erro ao conectar ao servidor para exclusão.');
+      alert(err.message || 'Erro ao excluir o processo.');
+    }
+  };
+
+  // Estilização condicional dos badges de status
+  const obterEstiloStatus = (status) => {
+    switch(status) {
+      case 'Aprovado':
+      case 'Deferido': 
+        return { bg: '#064e3b', text: '#6ee7b7' };
+      case 'Com Exigência': 
+        return { bg: '#78350f', text: '#fde68a' };
+      case 'Indeferido': 
+        return { bg: '#7f1d1d', text: '#fca5a5' };
+      default: 
+        return { bg: '#1e3a8a', text: '#93c5fd' }; // Em Análise
     }
   };
 
@@ -127,7 +92,7 @@ export default function Processos() {
       padding: '40px 24px',
       maxWidth: '1280px',
       margin: '0 auto',
-      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
     }}>
       
       {/* CABEÇALHO */}
@@ -139,25 +104,12 @@ export default function Processos() {
         paddingBottom: '24px',
         borderBottom: '1px solid #334155'
       }}>
-        <div style={{ paddingRight: '24px' }}>
-          <h1 style={{
-            fontSize: '28px',
-            fontWeight: '700',
-            color: '#f8fafc',
-            margin: '0 0 10px 0',
-            letterSpacing: '-0.02em',
-            lineHeight: '1.2'
-          }}>
+        <div>
+          <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#f8fafc', margin: '0 0 10px 0' }}>
             Acompanhamento de Processos
           </h1>
-          <p style={{
-            color: '#94a3b8',
-            margin: 0,
-            fontSize: '15px',
-            lineHeight: '1.6',
-            letterSpacing: '0.01em'
-          }}>
-            Gerencie as solicitações e alterações empresariais registradas na JUCEPE
+          <p style={{ color: '#94a3b8', margin: 0, fontSize: '15px' }}>
+            Gerencie as solicitações empresariais cadastradas no sistema.
           </p>
         </div>
 
@@ -171,10 +123,7 @@ export default function Processos() {
             border: 'none',
             fontWeight: '600',
             fontSize: '14px',
-            letterSpacing: '0.02em',
             cursor: 'pointer',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3)',
-            whiteSpace: 'nowrap',
             transition: 'background-color 0.2s'
           }}
         >
@@ -182,14 +131,10 @@ export default function Processos() {
         </button>
       </div>
 
-      {/* MENSAGEM DE CARREGAMENTO */}
-      {carregando && (
-        <div style={{ padding: '32px 0', color: '#94a3b8', fontSize: '15px', letterSpacing: '0.01em' }}>
-          Carregando registros do banco de dados...
-        </div>
-      )}
+      {/* CARREGAMENTO */}
+      {carregando && <div style={{ color: '#94a3b8' }}>Carregando registros do banco de dados...</div>}
 
-      {/* MENSAGEM DE ERRO */}
+      {/* ERRO COM LIMPEZA COMPLETA DE SESSÃO */}
       {erro && (
         <div style={{
           backgroundColor: '#451a1a',
@@ -198,38 +143,44 @@ export default function Processos() {
           padding: '20px 24px',
           borderRadius: '10px',
           marginBottom: '28px',
-          lineHeight: '1.5',
-          fontSize: '14px'
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '16px'
         }}>
-          <strong>Atenção:</strong> {erro}
+          <div>
+            <strong>Atenção:</strong> {erro}
+          </div>
+
+          <button
+            onClick={handleSessaoExpirada}
+            style={{
+              backgroundColor: '#0284c7',
+              color: '#ffffff',
+              border: 'none',
+              padding: '10px 18px',
+              borderRadius: '6px',
+              fontWeight: '600',
+              fontSize: '13px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Fazer Login Novamente
+          </button>
         </div>
       )}
 
       {/* TABELA DE PROCESSOS */}
       {!carregando && !erro && (
-        <div style={{
-          backgroundColor: '#1e293b',
-          border: '1px solid #334155',
-          borderRadius: '12px',
-          overflow: 'hidden',
-          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)'
-        }}>
+        <div style={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '12px', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', color: '#e2e8f0' }}>
             <thead>
-              <tr style={{
-                backgroundColor: '#0f172a',
-                borderBottom: '1px solid #334155',
-                color: '#94a3b8',
-                fontSize: '12px',
-                fontWeight: '700',
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em'
-              }}>
+              <tr style={{ backgroundColor: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8', fontSize: '12px', textTransform: 'uppercase' }}>
                 <th style={{ padding: '16px 24px' }}>Protocolo</th>
                 <th style={{ padding: '16px 24px' }}>Empresa</th>
                 <th style={{ padding: '16px 24px' }}>Tipo de Ato</th>
                 <th style={{ padding: '16px 24px' }}>Requerente</th>
-                <th style={{ padding: '16px 24px' }}>Data</th>
                 <th style={{ padding: '16px 24px' }}>Status</th>
                 <th style={{ padding: '16px 24px', textAlign: 'center' }}>Ações</th>
               </tr>
@@ -237,76 +188,53 @@ export default function Processos() {
             <tbody>
               {processos.length === 0 ? (
                 <tr>
-                  <td colSpan="7" style={{ padding: '40px 24px', textAlign: 'center', color: '#64748b', fontSize: '14px' }}>
-                    Nenhum processo cadastrado até o momento.
+                  <td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
+                    Nenhum processo cadastrado.
                   </td>
                 </tr>
               ) : (
-                processos.map((proc) => (
-                  <tr key={proc.id} style={{ borderBottom: '1px solid #334155' }}>
-                    <td style={{ padding: '18px 24px', fontWeight: '600', color: '#38bdf8', fontSize: '14px' }}>
-                      {proc.numero}
-                    </td>
-                    <td style={{ padding: '18px 24px', fontWeight: '500', color: '#f8fafc', fontSize: '14px' }}>
-                      {proc.empresa}
-                    </td>
-                    <td style={{ padding: '18px 24px', color: '#cbd5e1', fontSize: '14px' }}>
-                      {proc.tipo}
-                    </td>
-                    <td style={{ padding: '18px 24px', color: '#cbd5e1', fontSize: '14px' }}>
-                      {proc.requerente}
-                    </td>
-                    <td style={{ padding: '18px 24px', color: '#94a3b8', fontSize: '14px' }}>
-                      {proc.data}
-                    </td>
-                    <td style={{ padding: '18px 24px' }}>
-                      <select
-                        value={proc.status}
-                        onChange={(e) => handleAlterarStatus(proc.id, e.target.value)}
-                        style={{
-                          backgroundColor: 
-                            proc.status === 'Aprovado' || proc.status === 'Deferido' ? '#064e3b' :
-                            proc.status === 'Com Exigência' ? '#78350f' :
-                            proc.status === 'Indeferido' ? '#7f1d1d' : '#1e3a8a',
-                          color: 
-                            proc.status === 'Aprovado' || proc.status === 'Deferido' ? '#6ee7b7' :
-                            proc.status === 'Com Exigência' ? '#fde68a' :
-                            proc.status === 'Indeferido' ? '#fca5a5' : '#93c5fd',
-                          border: '1px solid #334155',
-                          borderRadius: '20px',
-                          padding: '6px 12px',
-                          fontSize: '12px',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          outline: 'none'
-                        }}
-                      >
-                        <option value="Em Análise">Em Análise</option>
-                        <option value="Aprovado">Aprovado</option>
-                        <option value="Com Exigência">Com Exigência</option>
-                        <option value="Indeferido">Indeferido</option>
-                      </select>
-                    </td>
-                    <td style={{ padding: '18px 24px', textAlign: 'center' }}>
-                      <button
-                        onClick={() => handleExcluir(proc.id)}
-                        style={{
-                          backgroundColor: 'transparent',
-                          color: '#f87171',
-                          border: '1px solid #7f1d1d',
-                          padding: '6px 12px',
-                          borderRadius: '6px',
-                          fontSize: '12px',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        Excluir
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                processos.map((proc) => {
+                  const estilo = obterEstiloStatus(proc.status);
+                  
+                  return (
+                    <tr key={proc.id} style={{ borderBottom: '1px solid #334155' }}>
+                      <td style={{ padding: '18px 24px', fontWeight: '600', color: '#38bdf8' }}>{proc.numero}</td>
+                      <td style={{ padding: '18px 24px', fontWeight: '500', color: '#f8fafc' }}>{proc.empresa}</td>
+                      <td style={{ padding: '18px 24px', color: '#cbd5e1' }}>{proc.tipo}</td>
+                      <td style={{ padding: '18px 24px', color: '#cbd5e1' }}>{proc.requerente}</td>
+                      <td style={{ padding: '18px 24px' }}>
+                        <select
+                          value={proc.status}
+                          onChange={(e) => handleAlterarStatus(proc.id, e.target.value)}
+                          style={{
+                            backgroundColor: estilo.bg,
+                            color: estilo.text,
+                            border: '1px solid #334155',
+                            borderRadius: '20px',
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            outline: 'none'
+                          }}
+                        >
+                          <option value="Em Análise">Em Análise</option>
+                          <option value="Aprovado">Aprovado</option>
+                          <option value="Com Exigência">Com Exigência</option>
+                          <option value="Indeferido">Indeferido</option>
+                        </select>
+                      </td>
+                      <td style={{ padding: '18px 24px', textAlign: 'center' }}>
+                        <button
+                          onClick={() => handleExcluir(proc.id)}
+                          style={{ backgroundColor: 'transparent', color: '#f87171', border: '1px solid #7f1d1d', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' }}
+                        >
+                          Excluir
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -337,12 +265,7 @@ export default function Processos() {
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
             color: '#f8fafc'
           }}>
-            <h2 style={{
-              margin: '0 0 24px 0',
-              fontSize: '20px',
-              fontWeight: '700',
-              letterSpacing: '-0.01em'
-            }}>
+            <h2 style={{ margin: '0 0 24px 0', fontSize: '20px', fontWeight: '700' }}>
               Abrir Novo Processo
             </h2>
 
@@ -403,6 +326,7 @@ export default function Processos() {
                 </label>
                 <input 
                   type="text" 
+                  required
                   placeholder="Ex: Carlos Eduardo"
                   value={requerente} 
                   onChange={(e) => setRequerente(e.target.value)}
