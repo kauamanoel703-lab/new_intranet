@@ -1,5 +1,7 @@
 ﻿import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { cadastrarUsuario } from '../services/api';
+import { validarCPF, mascararCPF, mascararTelefone } from '../utils/validators';
 
 export default function Register() {
   const [form, setForm] = useState({
@@ -11,379 +13,186 @@ export default function Register() {
   });
 
   const [mostrarSenha, setMostrarSenha] = useState(false);
-  const [errors, setErrors] = useState({});
+  const [erros, setErros] = useState({});
   const [loading, setLoading] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
+  const [sucesso, setSucesso] = useState('');
 
   const navigate = useNavigate();
 
-  // MÁSCARA E TRAVA PARA CPF (Apenas números, máx 11 dígitos -> 000.000.000-00)
-  const maskCPF = (value) => {
-    return value
-      .replace(/\D/g, '') // Remove tudo o que não for dígito
-      .slice(0, 11) // Limita a 11 números
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  const handleChange = (campo, valor) => {
+    setForm(prev => ({ ...prev, [campo]: valor }));
+    if (erros[campo]) setErros(prev => ({ ...prev, [campo]: '' }));
   };
 
-  // MÁSCARA E TRAVA PARA TELEFONE (Apenas números, máx 11 dígitos -> (00) 00000-0000)
-  const maskTelefone = (value) => {
-    return value
-      .replace(/\D/g, '') // Remove tudo o que não for dígito
-      .slice(0, 11) // Limita a 11 números
-      .replace(/^(\d{2})(\d)/g, '($1) $2')
-      .replace(/(\d{5})(\d)/, '$1-$2')
-      .replace(/(-\d{4})\d+?$/, '$1');
-  };
+  const validarFormulario = () => {
+    const novosErros = {};
 
-  const handleChange = (field, value) => {
-    setForm(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
+    if (!form.nome.trim()) novosErros.nome = 'Informe seu nome completo.';
+    if (!form.email.trim() || !/\S+@\S+\.\S+/.test(form.email)) {
+      novosErros.email = 'Insira um e-mail válido.';
     }
-  };
-
-  const handleCpfChange = (e) => {
-    const valorFormatado = maskCPF(e.target.value);
-    handleChange('cpf', valorFormatado);
-  };
-
-  const handleTelefoneChange = (e) => {
-    const valorFormatado = maskTelefone(e.target.value);
-    handleChange('telefone', valorFormatado);
-  };
-
-  const handleSenhaChange = (e) => {
-    const valor = e.target.value;
-    if (valor.length <= 6) {
-      handleChange('senha', valor);
+    if (!form.senha || form.senha.length !== 6) {
+      novosErros.senha = 'A senha deve conter exatamente 6 caracteres numéricos ou alfanuméricos.';
     }
-  };
-
-  const validate = () => {
-    const newErrors = {};
-    if (!form.nome.trim()) newErrors.nome = 'Nome é obrigatório';
-    if (!form.email.trim()) newErrors.email = 'Email é obrigatório';
-    if (!form.senha || form.senha.length < 6) {
-      newErrors.senha = 'A senha deve ter exatamente 6 dígitos';
+    if (form.cpf && !validarCPF(form.cpf)) {
+      novosErros.cpf = 'CPF inválido. Verifique os dígitos informados.';
     }
-    return newErrors;
+
+    return novosErros;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const validationErrors = validate();
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
+    const errosValidacao = validarFormulario();
+
+    if (Object.keys(errosValidacao).length > 0) {
+      setErros(errosValidacao);
       return;
     }
 
     setLoading(true);
-    setSuccessMsg('');
-    setErrors({});
+    setSucesso('');
+    setErros({});
 
     try {
-      // Porta atualizada para 3001
-      const response = await fetch('http://localhost:3001/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          nome: form.nome,
-          email: form.email,
-          senha: form.senha,
-          cpf: form.cpf,
-          telefone: form.telefone
-        }),
-      });
+      // Limpa as máscaras antes de enviar para o banco de dados
+      const dadosLimpos = {
+        ...form,
+        cpf: form.cpf.replace(/\D/g, ''),
+        telefone: form.telefone.replace(/\D/g, '')
+      };
 
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('O servidor não retornou JSON. Verifique se o server.js está rodando na porta 3001.');
-      }
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.mensagem || 'Erro ao cadastrar usuário.');
-      }
-
-      setSuccessMsg('Usuário cadastrado com sucesso!');
+      await cadastrarUsuario(dadosLimpos);
+      setSucesso('Cadastro realizado com sucesso! Redirecionando...');
       setForm({ nome: '', email: '', senha: '', cpf: '', telefone: '' });
-      
+
       setTimeout(() => navigate('/login'), 2000);
 
     } catch (error) {
-      if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
-        setErrors({ geral: 'Servidor offline! Ligue o backend com "node server.js" na porta 3001.' });
-      } else {
-        setErrors({ geral: error.message || 'Erro inesperado ao conectar com o servidor.' });
-      }
+      setErros({ geral: error.message });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#090d16',
-      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      padding: '20px'
-    }}>
-      <div style={{
-        width: '100%',
-        maxWidth: '420px',
-        padding: '32px',
-        textAlign: 'center'
-      }}>
-        <h1 style={{
-          color: '#ffffff',
-          fontSize: '28px',
-          fontWeight: '700',
-          marginBottom: '8px',
-          letterSpacing: '-0.02em'
-        }}>
-          Cadastro de Usuário
-        </h1>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#090d16', fontFamily: 'system-ui, -apple-system, sans-serif', padding: '20px' }}>
+      <div style={{ width: '100%', maxWidth: '440px', padding: '32px', textAlign: 'center' }}>
+        
+        <h1 style={{ color: '#ffffff', fontSize: '26px', fontWeight: '700', marginBottom: '8px' }}>Cadastro de Usuário</h1>
+        <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '24px' }}>Crie seu acesso para interagir com o sistema JUCEPE.</p>
 
-        <p style={{
-          color: '#94a3b8',
-          fontSize: '14px',
-          marginBottom: '24px'
-        }}>
-          Preencha os dados abaixo para se cadastrar no sistema JUCEPE.
-        </p>
-
-        {/* MENSAGEM DE SUCESSO */}
-        {successMsg && (
-          <div style={{
-            backgroundColor: '#d1fae5',
-            border: '1px solid #6ee7b7',
-            color: '#065f46',
-            padding: '12px 16px',
-            borderRadius: '8px',
-            fontSize: '13px',
-            textAlign: 'left',
-            marginBottom: '20px'
-          }}>
-            {successMsg}
+        {sucesso && (
+          <div role="status" style={{ backgroundColor: '#d1fae5', border: '1px solid #6ee7b7', color: '#065f46', padding: '12px 16px', borderRadius: '8px', fontSize: '13px', textAlign: 'left', marginBottom: '20px' }}>
+            {sucesso}
           </div>
         )}
 
-        {/* MENSAGEM DE ERRO GERAL */}
-        {errors.geral && (
-          <div style={{
-            backgroundColor: '#fee2e2',
-            border: '1px solid #fca5a5',
-            color: '#991b1b',
-            padding: '12px 16px',
-            borderRadius: '8px',
-            fontSize: '13px',
-            textAlign: 'left',
-            marginBottom: '20px',
-            lineHeight: '1.4'
-          }}>
-            {errors.geral}
+        {erros.geral && (
+          <div role="alert" style={{ backgroundColor: '#fef2f2', border: '1px solid #fca5a5', color: '#991b1b', padding: '12px 16px', borderRadius: '8px', fontSize: '13px', textAlign: 'left', marginBottom: '20px' }}>
+            {erros.geral}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ textAlign: 'left' }}>
-          {/* NOME COMPLETO */}
+        <form onSubmit={handleSubmit} style={{ textAlign: 'left' }} noValidate>
+          
+          {/* Nome */}
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', color: '#ffffff', fontSize: '14px', fontWeight: '600', marginBottom: '6px' }}>
-              Nome completo *
-            </label>
-            <input
-              type="text"
+            <label htmlFor="nome" style={{ display: 'block', color: '#ffffff', fontSize: '14px', fontWeight: '600', marginBottom: '6px' }}>Nome completo *</label>
+            <input 
+              id="nome"
+              type="text" 
               required
               value={form.nome}
               onChange={(e) => handleChange('nome', e.target.value)}
               placeholder="Digite seu nome completo"
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                backgroundColor: '#eef2ff',
-                border: errors.nome ? '2px solid #ef4444' : 'none',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: '#0f172a',
-                outline: 'none',
-                boxSizing: 'border-box'
-              }}
+              style={{ width: '100%', padding: '12px 14px', backgroundColor: '#eef2ff', border: erros.nome ? '2px solid #ef4444' : 'none', borderRadius: '6px', fontSize: '14px', color: '#0f172a', boxSizing: 'border-box' }}
             />
-            {errors.nome && <span style={{ color: '#f87171', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.nome}</span>}
+            {erros.nome && <span style={{ color: '#f87171', fontSize: '12px', marginTop: '4px', display: 'block' }}>{erros.nome}</span>}
           </div>
 
-          {/* EMAIL */}
+          {/* Email */}
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', color: '#ffffff', fontSize: '14px', fontWeight: '600', marginBottom: '6px' }}>
-              Email *
-            </label>
-            <input
-              type="email"
+            <label htmlFor="reg-email" style={{ display: 'block', color: '#ffffff', fontSize: '14px', fontWeight: '600', marginBottom: '6px' }}>E-mail *</label>
+            <input 
+              id="reg-email"
+              type="email" 
               required
               value={form.email}
               onChange={(e) => handleChange('email', e.target.value)}
               placeholder="seu.email@jucepe.pe.gov.br"
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                backgroundColor: '#eef2ff',
-                border: errors.email ? '2px solid #ef4444' : 'none',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: '#0f172a',
-                outline: 'none',
-                boxSizing: 'border-box'
-              }}
+              style={{ width: '100%', padding: '12px 14px', backgroundColor: '#eef2ff', border: erros.email ? '2px solid #ef4444' : 'none', borderRadius: '6px', fontSize: '14px', color: '#0f172a', boxSizing: 'border-box' }}
             />
-            {errors.email && <span style={{ color: '#f87171', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.email}</span>}
+            {erros.email && <span style={{ color: '#f87171', fontSize: '12px', marginTop: '4px', display: 'block' }}>{erros.email}</span>}
           </div>
 
-          {/* SENHA (MAX 6 CARACTERES) */}
+          {/* Senha */}
           <div style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-              <label style={{ color: '#ffffff', fontSize: '14px', fontWeight: '600' }}>
-                Senha *
-              </label>
-              <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                {form.senha.length}/6 dígitos
-              </span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <label htmlFor="reg-senha" style={{ color: '#ffffff', fontSize: '14px', fontWeight: '600' }}>Senha (6 dígitos) *</label>
+              <span style={{ fontSize: '12px', color: form.senha.length === 6 ? '#4ade80' : '#94a3b8' }}>{form.senha.length}/6</span>
             </div>
-
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <input
+              <input 
+                id="reg-senha"
                 type={mostrarSenha ? "text" : "password"}
                 required
                 maxLength={6}
                 value={form.senha}
-                onChange={handleSenhaChange}
+                onChange={(e) => handleChange('senha', e.target.value.slice(0, 6))}
                 placeholder="••••••"
-                style={{
-                  width: '100%',
-                  padding: '12px 46px 12px 14px',
-                  backgroundColor: '#eef2ff',
-                  border: errors.senha ? '2px solid #ef4444' : 'none',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  color: '#0f172a',
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                  letterSpacing: mostrarSenha ? 'normal' : '0.25em'
-                }}
+                style={{ width: '100%', padding: '12px 46px 12px 14px', backgroundColor: '#eef2ff', border: erros.senha ? '2px solid #ef4444' : 'none', borderRadius: '6px', fontSize: '14px', color: '#0f172a', boxSizing: 'border-box', letterSpacing: mostrarSenha ? 'normal' : '0.25em' }}
               />
-              <button
-                type="button"
-                onClick={() => setMostrarSenha(!mostrarSenha)}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: '#334155',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
+              <button 
+                type="button" 
+                onClick={() => setMostrarSenha(!mostrarSenha)} 
+                aria-label={mostrarSenha ? "Ocultar senha" : "Exibir senha"}
+                style={{ position: 'absolute', right: '12px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}
               >
-                {mostrarSenha ? (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                    <line x1="1" y1="1" x2="23" y2="23"></line>
-                  </svg>
-                ) : (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                    <circle cx="12" cy="12" r="3"></circle>
-                  </svg>
-                )}
+                {mostrarSenha ? '🙈' : '👁️'}
               </button>
             </div>
-            {errors.senha && <span style={{ color: '#f87171', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.senha}</span>}
+            {erros.senha && <span style={{ color: '#f87171', fontSize: '12px', marginTop: '4px', display: 'block' }}>{erros.senha}</span>}
           </div>
 
-          {/* CPF COM TRAVA NUMÉRICA E MÁSCARA */}
+          {/* CPF */}
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', color: '#ffffff', fontSize: '14px', fontWeight: '600', marginBottom: '6px' }}>
-              CPF
-            </label>
-            <input
-              type="text"
-              maxLength={14}
+            <label htmlFor="cpf" style={{ display: 'block', color: '#ffffff', fontSize: '14px', fontWeight: '600', marginBottom: '6px' }}>CPF</label>
+            <input 
+              id="cpf"
+              type="text" 
               value={form.cpf}
-              onChange={handleCpfChange}
+              onChange={(e) => handleChange('cpf', mascararCPF(e.target.value))}
               placeholder="000.000.000-00"
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                backgroundColor: '#eef2ff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: '#0f172a',
-                outline: 'none',
-                boxSizing: 'border-box'
-              }}
+              style={{ width: '100%', padding: '12px 14px', backgroundColor: '#eef2ff', border: erros.cpf ? '2px solid #ef4444' : 'none', borderRadius: '6px', fontSize: '14px', color: '#0f172a', boxSizing: 'border-box' }}
             />
+            {erros.cpf && <span style={{ color: '#f87171', fontSize: '12px', marginTop: '4px', display: 'block' }}>{erros.cpf}</span>}
           </div>
 
-          {/* TELEFONE COM TRAVA NUMÉRICA E MÁSCARA */}
+          {/* Telefone */}
           <div style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'block', color: '#ffffff', fontSize: '14px', fontWeight: '600', marginBottom: '6px' }}>
-              Telefone
-            </label>
-            <input
-              type="text"
-              maxLength={15}
+            <label htmlFor="telefone" style={{ display: 'block', color: '#ffffff', fontSize: '14px', fontWeight: '600', marginBottom: '6px' }}>Telefone / Celular</label>
+            <input 
+              id="telefone"
+              type="text" 
               value={form.telefone}
-              onChange={handleTelefoneChange}
+              onChange={(e) => handleChange('telefone', mascararTelefone(e.target.value))}
               placeholder="(81) 90000-0000"
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                backgroundColor: '#eef2ff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: '#0f172a',
-                outline: 'none',
-                boxSizing: 'border-box'
-              }}
+              style={{ width: '100%', padding: '12px 14px', backgroundColor: '#eef2ff', border: 'none', borderRadius: '6px', fontSize: '14px', color: '#0f172a', boxSizing: 'border-box' }}
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              width: '100%',
-              padding: '12px',
-              backgroundColor: '#0070f3',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '15px',
-              fontWeight: '600',
-              cursor: loading ? 'wait' : 'pointer',
-              opacity: loading ? 0.7 : 1,
-              transition: 'background-color 0.2s'
-            }}
+          <button 
+            type="submit" 
+            disabled={loading} 
+            style={{ width: '100%', padding: '12px', backgroundColor: '#0070f3', color: '#ffffff', border: 'none', borderRadius: '6px', fontSize: '15px', fontWeight: '600', cursor: loading ? 'wait' : 'pointer' }}
           >
-            {loading ? 'Cadastrando...' : 'Cadastrar'}
+            {loading ? 'Cadastrando...' : 'Finalizar Cadastro'}
           </button>
         </form>
 
         <p style={{ marginTop: '24px', color: '#94a3b8', fontSize: '14px' }}>
-          Já tem uma conta?{' '}
-          <Link to="/login" style={{ color: '#818cf8', textDecoration: 'underline' }}>
-            Voltar para o Login
-          </Link>
+          Já possui conta? <Link to="/login" style={{ color: '#818cf8', fontWeight: '500', textDecoration: 'underline' }}>Fazer Login</Link>
         </p>
       </div>
     </div>

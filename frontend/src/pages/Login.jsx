@@ -1,217 +1,117 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { loginUsuario } from '../services/api';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [erro, setErro] = useState('');
+  const [sessaoExpirada, setSessaoExpirada] = useState(false);
   const [carregando, setCarregando] = useState(false);
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
 
-  const handleSenhaChange = (e) => {
-    const valor = e.target.value;
-    if (valor.length <= 6) {
-      setSenha(valor);
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('sessao') === 'expirada') {
+      setSessaoExpirada(true);
     }
-  };
+  }, [location]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setErro('');
+    setSessaoExpirada(false);
+
+    if (!email || !senha) {
+      setErro('Por favor, preencha todos os campos.');
+      return;
+    }
+
     setCarregando(true);
 
     try {
-      // Ajustado para a porta 3001 e rota /api/login
-      const response = await fetch('http://localhost:3001/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, senha }),
-      });
+      const data = await loginUsuario({ email, senha });
 
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('A rota do servidor não retornou JSON. Verifique se o server.js está rodando na porta 3001.');
-      }
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.mensagem || 'E-mail ou senha inválidos.');
-      }
-
-      // Salva os dados na sessão
+      // Ordem correta mantida: login(usuario, token)
       if (typeof login === 'function') {
-        login(data.token, data.usuario);
-      }
-      
-      localStorage.setItem('token', data.token);
-      if (data.usuario) {
-        localStorage.setItem('usuario', JSON.stringify(data.usuario));
+        login(data.usuario, data.token);
       }
 
-      navigate('/processos');
-
+      navigate('/dashboard');
     } catch (err) {
-      if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
-        setErro('Não foi possível conectar ao servidor. Verifique se o backend está rodando na porta 3001.');
-      } else if (err.message.includes('Unexpected token') || err.message.includes('JSON')) {
-        setErro('Erro na resposta do servidor. Certifique-se de que a rota /api/login existe no server.js.');
-      } else {
-        setErro(err.message || 'Ocorreu um erro ao realizar o login.');
-      }
+      setErro(err.message);
     } finally {
       setCarregando(false);
     }
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#090d16',
-      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-    }}>
-      <div style={{
-        width: '100%',
-        maxWidth: '400px',
-        padding: '32px',
-        textAlign: 'center'
-      }}>
-        <h1 style={{
-          color: '#ffffff',
-          fontSize: '28px',
-          fontWeight: '700',
-          marginBottom: '8px',
-          letterSpacing: '-0.02em'
-        }}>
-          Login — JUCEPE
-        </h1>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#090d16', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+      <div style={{ width: '100%', maxWidth: '400px', padding: '32px', textAlign: 'center' }}>
         
-        <p style={{
-          color: '#94a3b8',
-          fontSize: '14px',
-          marginBottom: '28px',
-          lineHeight: '1.5'
-        }}>
-          Entre com suas credenciais para acessar o sistema.
+        {/* Identidade JUCEPE */}
+        <h1 style={{ color: '#ffffff', fontSize: '26px', fontWeight: '700', marginBottom: '8px', letterSpacing: '-0.5px' }}>
+          Portal JUCEPE
+        </h1>
+        <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '28px' }}>
+          Sistema de Gestão e Processos Mercantis
         </p>
 
+        {sessaoExpirada && (
+          <div role="alert" style={{ backgroundColor: '#fffbe8', border: '1px solid #fde047', color: '#854d0e', padding: '12px 16px', borderRadius: '8px', fontSize: '13px', textAlign: 'left', marginBottom: '20px' }}>
+            <strong>⚠️ Sessão Expirada:</strong> Por favor, faça login novamente para continuar.
+          </div>
+        )}
+
         {erro && (
-          <div style={{
-            backgroundColor: '#fee2e2',
-            border: '1px solid #fca5a5',
-            color: '#991b1b',
-            padding: '12px 16px',
-            borderRadius: '8px',
-            fontSize: '13px',
-            textAlign: 'left',
-            marginBottom: '20px',
-            lineHeight: '1.4'
-          }}>
+          <div role="alert" style={{ backgroundColor: '#fef2f2', border: '1px solid #fca5a5', color: '#991b1b', padding: '12px 16px', borderRadius: '8px', fontSize: '13px', textAlign: 'left', marginBottom: '20px' }}>
             {erro}
           </div>
         )}
 
-        <form onSubmit={handleLogin} style={{ textAlign: 'left' }}>
+        <form onSubmit={handleLogin} style={{ textAlign: 'left' }} noValidate>
           <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              color: '#ffffff',
-              fontSize: '14px',
-              fontWeight: '600',
-              marginBottom: '8px'
-            }}>
-              Email
+            <label htmlFor="email" style={{ display: 'block', color: '#f8fafc', fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>
+              E-mail corporativo ou institucional
             </label>
             <input 
+              id="email"
               type="email" 
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="seu.email@jucepe.pe.gov.br"
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                backgroundColor: '#eef2ff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: '#0f172a',
-                outline: 'none',
-                boxSizing: 'border-box'
-              }}
+              placeholder="seu.nome@jucepe.pe.gov.br"
+              style={{ width: '100%', padding: '12px 14px', backgroundColor: '#eef2ff', border: 'none', borderRadius: '6px', fontSize: '14px', color: '#0f172a', boxSizing: 'border-box', outline: 'none' }}
             />
           </div>
 
           <div style={{ marginBottom: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <label style={{ color: '#ffffff', fontSize: '14px', fontWeight: '600' }}>
-                Senha
-              </label>
-              <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                {senha.length}/6 dígitos
-              </span>
-            </div>
-            
+            <label htmlFor="senha" style={{ color: '#f8fafc', fontSize: '14px', fontWeight: '600', display: 'block', marginBottom: '8px' }}>
+              Senha de Acesso (6 dígitos)
+            </label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <input 
+                id="senha"
                 type={mostrarSenha ? "text" : "password"}
                 required
                 maxLength={6}
                 value={senha}
-                onChange={handleSenhaChange}
+                onChange={(e) => setSenha(e.target.value)}
                 placeholder="••••••"
-                style={{
-                  width: '100%',
-                  padding: '12px 46px 12px 14px',
-                  backgroundColor: '#eef2ff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  color: '#0f172a',
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                  letterSpacing: mostrarSenha ? 'normal' : '0.25em'
-                }}
+                style={{ width: '100%', padding: '12px 46px 12px 14px', backgroundColor: '#eef2ff', border: 'none', borderRadius: '6px', fontSize: '14px', color: '#0f172a', boxSizing: 'border-box', letterSpacing: mostrarSenha ? 'normal' : '0.25em' }}
               />
-
               <button
                 type="button"
                 onClick={() => setMostrarSenha(!mostrarSenha)}
-                title={mostrarSenha ? "Ocultar senha" : "Exibir senha"}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#334155',
-                  zIndex: 2
-                }}
+                aria-label={mostrarSenha ? "Ocultar senha" : "Exibir senha"}
+                style={{ position: 'absolute', right: '12px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}
               >
-                {mostrarSenha ? (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                    <line x1="1" y1="1" x2="23" y2="23"></line>
-                  </svg>
-                ) : (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                    <circle cx="12" cy="12" r="3"></circle>
-                  </svg>
-                )}
+                {mostrarSenha ? '🙈' : '👁️'}
               </button>
             </div>
           </div>
@@ -219,30 +119,14 @@ export default function Login() {
           <button 
             type="submit" 
             disabled={carregando}
-            style={{
-              width: '100%',
-              padding: '12px',
-              backgroundColor: '#0070f3',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '15px',
-              fontWeight: '600',
-              cursor: carregando ? 'wait' : 'pointer',
-              opacity: carregando ? 0.7 : 1,
-              transition: 'background-color 0.2s'
-            }}
+            style={{ width: '100%', padding: '12px', backgroundColor: '#0070f3', color: '#ffffff', border: 'none', borderRadius: '6px', fontSize: '15px', fontWeight: '600', cursor: carregando ? 'wait' : 'pointer', transition: 'background-color 0.2s' }}
           >
-            {carregando ? 'Entrando...' : 'Entrar'}
+            {carregando ? 'Autenticando...' : 'Acessar Sistema'}
           </button>
         </form>
 
-        <p style={{
-          marginTop: '28px',
-          color: '#94a3b8',
-          fontSize: '14px'
-        }}>
-          Não tem conta? <Link to="/register" style={{ color: '#818cf8', textDecoration: 'underline' }}>Cadastre-se</Link>
+        <p style={{ marginTop: '28px', color: '#94a3b8', fontSize: '14px' }}>
+          Ainda não possui credenciais? <Link to="/register" style={{ color: '#818cf8', fontWeight: '500', textDecoration: 'underline' }}>Solicitar Cadastro</Link>
         </p>
       </div>
     </div>
