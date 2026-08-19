@@ -5,7 +5,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Usuarios from './pages/Usuarios';
-import Processos from './pages/Processos';
+import Processos from './pages/processos';
 
 // Rota Protegida (só entra se autenticado)
 const PrivateRoute = ({ children }) => {

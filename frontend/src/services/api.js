@@ -81,14 +81,18 @@ export const deletarUsuario = (id) =>
   executarRequisicao(`/usuarios/${id}`, { method: 'DELETE' });
 
 // ==================== ENDPOINTS DE PROCESSOS (JUCEPE) ====================
-export const listarProcessos = () => 
+export const listarProcessos = () =>
   executarRequisicao('/processos', { method: 'GET' });
 
-export const cadastrarProcesso = (dados) => 
+export const cadastrarProcesso = (dados) =>
   executarRequisicao('/processos', { method: 'POST', body: JSON.stringify(dados) });
 
-export const atualizarProcesso = (id, dados) => 
+export const atualizarProcesso = (id, dados) =>
   executarRequisicao(`/processos/${id}`, { method: 'PUT', body: JSON.stringify(dados) });
 
-export const deletarProcesso = (id) => 
+export const deletarProcesso = (id) =>
   executarRequisicao(`/processos/${id}`, { method: 'DELETE' });
+
+// ==================== ENDPOINTS DE AVISOS (Mural) ====================
+export const listarAvisos = () =>
+  executarRequisicao('/avisos', { method: 'GET' });

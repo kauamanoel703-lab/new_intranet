@@ -1,31 +1,74 @@
-﻿const express = require('express');
+// ==================== CONFIGURAÇÃO INICIAL ====================
+require('dotenv').config(); // Carrega variáveis de ambiente do .env
+
+const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const mysql = require('mysql2/promise');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
 
 const app = express();
-const PORT = 3001;
-const JWT_SECRET = 'sua_chave_secreta_jucepe_2026'; // Mude em produção
+const PORT = process.env.PORT || 3001;
 
-// Middlewares
-app.use(cors());
+// ==================== MIDDLEWARES DE SEGURANÇA ====================
+
+// Helmet adiciona headers HTTP de segurança (XSS, clickjacking, etc.)
+app.use(helmet());
+
+// CORS com whitelist via .env (FRONTEND_ORIGIN pode ser lista separada por vírgula)
+const origensPermitidas = (process.env.FRONTEND_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map(o => o.trim());
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Permite requests sem origin (mobile, Postman, curl) só em dev
+    if (!origin && process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    if (origensPermitidas.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`Origem ${origin} não permitida pelo CORS`));
+  },
+  credentials: true
+}));
+
 app.use(express.json());
 
-// Configuração da Conexão com o Banco de Dados MySQL
+// Rate limiter global: 100 req / 15 min por IP
+const limiterGeral = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { erro: 'Muitas requisições. Tente novamente em 15 minutos.' }
+});
+app.use(limiterGeral);
+
+// Rate limiter específico para auth: 5 tentativas / 15 min por IP
+const limiterAuth = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { erro: 'Muitas tentativas de login. Tente novamente em 15 minutos.' }
+});
+
+// ==================== BANCO DE DADOS ====================
+
 const dbConfig = {
-  host: 'localhost',
-  user: 'root',
-  password: '', // Insira sua senha do MySQL se houver
-  database: 'jucepe_db' // Altere para o nome do seu banco de dados
+  host: process.env.DB_HOST || '127.0.0.1',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'jucepe_db'
 };
 
 let db;
 
-// Inicialização do Banco de Dados e Criação Automática das Tabelas
 async function inicializarBanco() {
   try {
-    // Cria conexão inicial sem especificar banco para garantir que o BD existe
+    // Garante que o banco existe
     const conexaoInicial = await mysql.createConnection({
       host: dbConfig.host,
       user: dbConfig.user,
@@ -34,24 +77,45 @@ async function inicializarBanco() {
     await conexaoInicial.query(`CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\`;`);
     await conexaoInicial.end();
 
-    // Conecta ao banco de dados principal
+    // Conecta ao banco principal
     db = await mysql.createPool(dbConfig);
 
-    // Tabela de Usuários (senha com VARCHAR(255) para aceitar o Hash do Bcrypt)
+    // Tabela de Usuários
     await db.query(`
       CREATE TABLE IF NOT EXISTS usuarios (
         id INT AUTO_INCREMENT PRIMARY KEY,
         nome VARCHAR(100) NOT NULL,
         email VARCHAR(100) NOT NULL UNIQUE,
-        senha VARCHAR(255) NOT NULL,
+        senha_hash VARCHAR(255) NOT NULL,
         cpf VARCHAR(14),
         telefone VARCHAR(20),
-        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        role VARCHAR(20) DEFAULT 'usuario',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
-    // Altera a coluna senha para VARCHAR(255) caso a tabela já existisse com tamanho menor
-    await db.query(`ALTER TABLE usuarios MODIFY COLUMN senha VARCHAR(255) NOT NULL;`);
+    // Migração: adiciona colunas em tabelas criadas com schema antigo
+    try {
+      await db.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'usuario';`);
+    } catch (e) { /* coluna já existe em MySQL < 8 */ }
+
+    // Renomeia coluna 'senha' → 'senha_hash' se necessário
+    const [colsUsuarios] = await db.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'usuarios'`,
+      [dbConfig.database]
+    );
+    const temSenha = colsUsuarios.some(c => c.COLUMN_NAME === 'senha');
+    const temSenhaHash = colsUsuarios.some(c => c.COLUMN_NAME === 'senha_hash');
+    if (temSenha && !temSenhaHash) {
+      await db.query(`ALTER TABLE usuarios CHANGE COLUMN senha senha_hash VARCHAR(255) NOT NULL;`);
+    }
+
+    const temCriadoEm = colsUsuarios.some(c => c.COLUMN_NAME === 'criado_em');
+    const temCreatedAt = colsUsuarios.some(c => c.COLUMN_NAME === 'created_at');
+    if (temCriadoEm && !temCreatedAt) {
+      await db.query(`ALTER TABLE usuarios CHANGE COLUMN criado_em created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+    }
 
     // Tabela de Processos
     await db.query(`
@@ -66,236 +130,53 @@ async function inicializarBanco() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
+    // Tabela de Avisos (usada pelo Mural de Avisos do frontend)
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS avisos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        titulo VARCHAR(200) NOT NULL,
+        conteudo TEXT NOT NULL,
+        data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
     console.log('✅ Banco de dados e tabelas sincronizados com sucesso!');
   } catch (error) {
     console.error('❌ Erro ao inicializar o Banco de Dados:', error.message);
+    process.exit(1); // Falha rápida se o banco não inicializar
   }
 }
 
-// ==================== MIDDLEWARE DE AUTENTICAÇÃO JWT ====================
+// ==================== ROTAS ====================
 
-const autenticarToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+// Aplica rate-limit específico nas rotas de auth
+const usuarioRoutes = require('./src/routes/usuarioRoutes');
+const processosRoutes = require('./src/routes/processosRoutes');
+const avisosRoutes = require('./src/routes/avisosRoutes');
 
-  if (!token) {
-    return res.status(401).json({ mensagem: 'Acesso negado. Token não fornecido.' });
-  }
+// Aplica rate-limit de auth nos endpoints públicos do usuarioRoutes
+app.use('/api/usuarios/cadastrar', limiterAuth);
+app.use('/api/usuarios/login', limiterAuth);
 
-  jwt.verify(token, JWT_SECRET, (err, usuario) => {
-    if (err) {
-      if (err.name === 'TokenExpiredError') {
-        return res.status(401).json({ 
-          mensagem: 'Sessão expirada. Por favor, faça login novamente.', 
-          tokenExpirado: true 
-        });
-      }
-      return res.status(403).json({ mensagem: 'Token inválido.' });
-    }
-    req.usuario = usuario;
-    next();
-  });
-};
+app.use('/api/usuarios', usuarioRoutes);
+app.use('/api/processos', processosRoutes);
+app.use('/api', avisosRoutes);
 
-// ==================== ROTAS DE AUTENTICAÇÃO ====================
-
-// Cadastro de Usuário
-app.post('/api/register', async (req, res) => {
-  const { nome, email, senha, cpf, telefone } = req.body;
-
-  if (!nome || !email || !senha) {
-    return res.status(400).json({ mensagem: 'Preencha todos os campos obrigatórios (Nome, E-mail e Senha).' });
-  }
-
-  try {
-    // Verifica se e-mail já existe
-    const [usuarioExistente] = await db.query('SELECT id FROM usuarios WHERE email = ?', [email]);
-    if (usuarioExistente.length > 0) {
-      return res.status(400).json({ mensagem: 'Este e-mail já está cadastrado.' });
-    }
-
-    // Criptografa a senha com Bcrypt
-    const senhaHash = await bcrypt.hash(senha, 10);
-
-    // Insere no banco
-    const [result] = await db.query(
-      'INSERT INTO usuarios (nome, email, senha, cpf, telefone) VALUES (?, ?, ?, ?, ?)',
-      [nome, email, senhaHash, cpf || null, telefone || null]
-    );
-
-    console.log(`✅ [CADASTRO SUCCESSO] Usuário "${nome}" (ID: ${result.insertId}) cadastrado.`);
-    res.status(201).json({ mensagem: 'Usuário cadastrado com sucesso!', id: result.insertId });
-
-  } catch (error) {
-    console.error('❌ ERRO NO CADASTRO:', error);
-    res.status(500).json({ mensagem: `Erro ao cadastrar usuário: ${error.message}` });
-  }
+// Rota raiz só pra confirmar que está online
+app.get('/', (req, res) => {
+  res.json({ status: 'online', servico: 'Intranet JUCEPE API', versao: '1.0.0' });
 });
 
-// Login de Usuário
-app.post('/api/login', async (req, res) => {
-  const { email, senha } = req.body;
-
-  if (!email || !senha) {
-    return res.status(400).json({ mensagem: 'Informe e-mail e senha.' });
-  }
-
-  try {
-    const [usuarios] = await db.query('SELECT * FROM usuarios WHERE email = ?', [email]);
-    if (usuarios.length === 0) {
-      return res.status(400).json({ mensagem: 'E-mail ou senha inválidos.' });
-    }
-
-    const usuario = usuarios[0];
-
-    // Compara a senha informada com o Hash do banco
-    const senhaValida = await bcrypt.compare(senha, usuario.senha);
-    if (!senhaValida) {
-      return res.status(400).json({ mensagem: 'E-mail ou senha inválidos.' });
-    }
-
-    // Gera o Token JWT (expira em 8 horas)
-    const token = jwt.sign(
-      { id: usuario.id, email: usuario.email, nome: usuario.nome },
-      JWT_SECRET,
-      { expiresIn: '8h' }
-    );
-
-    const usuarioInfo = {
-      id: usuario.id,
-      nome: usuario.nome,
-      email: usuario.email,
-      cpf: usuario.cpf,
-      telefone: usuario.telefone
-    };
-
-    console.log(`🔑 [LOGIN SUCCESS] Usuário "${usuario.nome}" autenticado.`);
-    res.json({ token, usuario: usuarioInfo });
-
-  } catch (error) {
-    console.error('❌ ERRO NO LOGIN:', error);
-    res.status(500).json({ mensagem: `Erro no servidor: ${error.message}` });
-  }
+// Tratamento global de erros
+app.use((err, req, res, next) => {
+  console.error('❌ ERRO:', err.message);
+  res.status(err.status || 500).json({ erro: err.message || 'Erro interno do servidor' });
 });
 
-// ==================== ROTAS DE USUÁRIOS (PROTEGIDAS) ====================
-
-// Listar Usuários
-app.get('/api/usuarios', autenticarToken, async (req, res) => {
-  try {
-    const [usuarios] = await db.query('SELECT id, nome, email, cpf, telefone, criado_em FROM usuarios');
-    res.json(usuarios);
-  } catch (error) {
-    console.error('❌ ERRO AO LISTAR USUÁRIOS:', error);
-    res.status(500).json({ mensagem: 'Erro ao buscar usuários.' });
-  }
-});
-
-// Atualizar Usuário
-app.put('/api/usuarios/:id', autenticarToken, async (req, res) => {
-  const { id } = req.params;
-  const { nome, email, senha, cpf, telefone } = req.body;
-
-  try {
-    if (senha) {
-      const senhaHash = await bcrypt.hash(senha, 10);
-      await db.query(
-        'UPDATE usuarios SET nome = ?, email = ?, senha = ?, cpf = ?, telefone = ? WHERE id = ?',
-        [nome, email, senhaHash, cpf, telefone, id]
-      );
-    } else {
-      await db.query(
-        'UPDATE usuarios SET nome = ?, email = ?, cpf = ?, telefone = ? WHERE id = ?',
-        [nome, email, cpf, telefone, id]
-      );
-    }
-
-    res.json({ mensagem: 'Usuário atualizado com sucesso!' });
-  } catch (error) {
-    console.error('❌ ERRO AO ATUALIZAR USUÁRIO:', error);
-    res.status(500).json({ mensagem: 'Erro ao atualizar usuário.' });
-  }
-});
-
-// Deletar Usuário
-app.delete('/api/usuarios/:id', autenticarToken, async (req, res) => {
-  const { id } = req.params;
-  try {
-    await db.query('DELETE FROM usuarios WHERE id = ?', [id]);
-    res.json({ mensagem: 'Usuário removido com sucesso!' });
-  } catch (error) {
-    console.error('❌ ERRO AO DELETAR USUÁRIO:', error);
-    res.status(500).json({ mensagem: 'Erro ao deletar usuário.' });
-  }
-});
-
-// ==================== ROTAS DE PROCESSOS (PROTEGIDAS) ====================
-
-// Listar Processos
-app.get('/api/processos', autenticarToken, async (req, res) => {
-  try {
-    const [processos] = await db.query('SELECT * FROM processos ORDER BY id DESC');
-    res.json(processos);
-  } catch (error) {
-    console.error('❌ ERRO AO LISTAR PROCESSOS:', error);
-    res.status(500).json({ mensagem: 'Erro ao listar processos.' });
-  }
-});
-
-// Cadastrar Processo
-app.post('/api/processos', autenticarToken, async (req, res) => {
-  const { numero_processo, requerente, tipo, status, descricao } = req.body;
-
-  if (!numero_processo || !requerente || !tipo) {
-    return res.status(400).json({ mensagem: 'Campos obrigatórios do processo ausentes.' });
-  }
-
-  try {
-    const [result] = await db.query(
-      'INSERT INTO processos (numero_processo, requerente, tipo, status, descricao) VALUES (?, ?, ?, ?, ?)',
-      [numero_processo, requerente, tipo, status || 'Em Andamento', descricao || '']
-    );
-
-    res.status(201).json({ mensagem: 'Processo cadastrado com sucesso!', id: result.insertId });
-  } catch (error) {
-    console.error('❌ ERRO AO CADASTRAR PROCESSO:', error);
-    res.status(500).json({ mensagem: 'Erro ao cadastrar processo.' });
-  }
-});
-
-// Atualizar Processo
-app.put('/api/processos/:id', autenticarToken, async (req, res) => {
-  const { id } = req.params;
-  const { numero_processo, requerente, tipo, status, descricao } = req.body;
-
-  try {
-    await db.query(
-      'UPDATE processos SET numero_processo = ?, requerente = ?, tipo = ?, status = ?, descricao = ? WHERE id = ?',
-      [numero_processo, requerente, tipo, status, descricao, id]
-    );
-
-    res.json({ mensagem: 'Processo atualizado com sucesso!' });
-  } catch (error) {
-    console.error('❌ ERRO AO ATUALIZAR PROCESSO:', error);
-    res.status(500).json({ mensagem: 'Erro ao atualizar processo.' });
-  }
-});
-
-// Deletar Processo
-app.delete('/api/processos/:id', autenticarToken, async (req, res) => {
-  const { id } = req.params;
-  try {
-    await db.query('DELETE FROM processos WHERE id = ?', [id]);
-    res.json({ mensagem: 'Processo deletado com sucesso!' });
-  } catch (error) {
-    console.error('❌ ERRO AO DELETAR PROCESSO:', error);
-    res.status(500).json({ mensagem: 'Erro ao deletar processo.' });
-  }
-});
-
-// ==================== INICIALIZAÇÃO DO SERVIDOR ====================
+// ==================== INICIALIZAÇÃO ====================
 
 app.listen(PORT, async () => {
   await inicializarBanco();
   console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
+  console.log(`🔒 CORS permitido para: ${origensPermitidas.join(', ')}`);
 });

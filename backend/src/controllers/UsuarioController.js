@@ -6,21 +6,34 @@ class UsuarioController {
   // POST /api/usuarios/cadastrar
   static async cadastrar(req, res) {
     try {
-      const { nome, email, senha } = req.body;
+      const { nome, email, senha, cpf, telefone, role } = req.body;
 
       if (!nome || !email || !senha) {
         return res.status(400).json({ erro: 'Todos os campos são obrigatórios' });
+      }
+
+      // Verifica se e-mail já existe
+      const existente = await UsuarioModel.buscarPorEmail(email);
+      if (existente) {
+        return res.status(400).json({ erro: 'Este e-mail já está cadastrado.' });
       }
 
       // Criptografa a senha antes de enviar ao Model
       const saltRounds = 10;
       const senhaHash = await bcrypt.hash(senha, saltRounds);
 
-      // Salva a hash gerada no banco de dados
-      const idInserido = await UsuarioModel.criar(nome, email, senhaHash);
+      // Salva a hash gerada no banco de dados (role padrão = 'usuario')
+      const idInserido = await UsuarioModel.criar(
+        nome, email, senhaHash,
+        cpf || null,
+        telefone || null,
+        role || 'usuario'
+      );
+
+      console.log(`✅ [CADASTRO] Usuário "${nome}" (ID: ${idInserido}) cadastrado.`);
       return res.status(201).json({ mensagem: 'Usuário criado com sucesso!', id: idInserido });
     } catch (error) {
-      console.error(error);
+      console.error('❌ ERRO NO CADASTRO:', error);
       return res.status(500).json({ erro: 'Erro interno ao cadastrar usuário' });
     }
   }
@@ -41,21 +54,29 @@ class UsuarioController {
         return res.status(401).json({ erro: 'Credenciais inválidas' });
       }
 
-      // Assina o Token JWT real com dados do usuário e expiração
-      const secretKey = process.env.JWT_SECRET || 'jucepe_chave_secreta_dev';
+      // Assina o Token JWT com dados do usuário e expiração
+      // Usa o JWT_SECRET do .env (carregado via dotenv.config() no server.js)
       const token = jwt.sign(
-        { id: usuario.id, role: usuario.role },
-        secretKey,
+        { id: usuario.id, role: usuario.role, email: usuario.email, nome: usuario.nome },
+        process.env.JWT_SECRET,
         { expiresIn: '8h' }
       );
 
+      console.log(`🔑 [LOGIN] Usuário "${usuario.nome}" autenticado.`);
       return res.json({
         mensagem: 'Login realizado com sucesso!',
         token,
-        usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, role: usuario.role }
+        usuario: {
+          id: usuario.id,
+          nome: usuario.nome,
+          email: usuario.email,
+          cpf: usuario.cpf,
+          telefone: usuario.telefone,
+          role: usuario.role
+        }
       });
     } catch (error) {
-      console.error(error);
+      console.error('❌ ERRO NO LOGIN:', error);
       return res.status(500).json({ erro: 'Erro interno ao realizar login' });
     }
   }
@@ -66,7 +87,7 @@ class UsuarioController {
       const usuarios = await UsuarioModel.listarTodos();
       return res.json(usuarios);
     } catch (error) {
-      console.error(error);
+      console.error('❌ ERRO AO LISTAR USUÁRIOS:', error);
       return res.status(500).json({ erro: 'Erro ao listar usuários' });
     }
   }
@@ -75,11 +96,11 @@ class UsuarioController {
   static async atualizar(req, res) {
     try {
       const { id } = req.params;
-      const { nome, email, role } = req.body;
-      await UsuarioModel.atualizar(id, nome, email, role);
+      const { nome, email, role, cpf, telefone } = req.body;
+      await UsuarioModel.atualizar(id, nome, email, role, cpf, telefone);
       return res.json({ mensagem: 'Usuário atualizado com sucesso!' });
     } catch (error) {
-      console.error(error);
+      console.error('❌ ERRO AO ATUALIZAR USUÁRIO:', error);
       return res.status(500).json({ erro: 'Erro ao atualizar usuário' });
     }
   }
@@ -91,7 +112,7 @@ class UsuarioController {
       await UsuarioModel.deletar(id);
       return res.json({ mensagem: 'Usuário removido com sucesso!' });
     } catch (error) {
-      console.error(error);
+      console.error('❌ ERRO AO DELETAR USUÁRIO:', error);
       return res.status(500).json({ erro: 'Erro ao deletar usuário' });
     }
   }
