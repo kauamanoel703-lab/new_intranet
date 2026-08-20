@@ -1,9 +1,10 @@
 const jwt = require('jsonwebtoken');
 
-// Esse middleware funciona como um "segurança na porta":
-// ele verifica o crachá (token) antes de deixar entrar na rota.
+/**
+ * Middleware para autenticação via Token JWT.
+ * Verifica a validade do token enviado no header Authorization: Bearer <token>
+ */
 const autenticar = (req, res, next) => {
-  // O token vem no header assim: "Authorization: Bearer <token>"
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -12,12 +13,10 @@ const autenticar = (req, res, next) => {
   }
 
   try {
-    // Verifica e decodifica o token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.usuario = decoded; // Anexa os dados do usuário na requisição
-    next();               // Libera para a rota seguinte
+    req.usuario = decoded; // Anexa os dados do usuário decodificados (id, role, email, nome)
+    next();
   } catch (error) {
-    // Token expirado tem tratamento especial para o frontend saber redirecionar
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({
         erro: 'Sessão expirada. Por favor, faça login novamente.',
@@ -28,4 +27,25 @@ const autenticar = (req, res, next) => {
   }
 };
 
-module.exports = { autenticar };
+/**
+ * Middleware de Autorização baseado em Perfis (RBAC).
+ * Verifica se a role do usuário autenticado tem permissão para acessar a rota.
+ * @param  {...string} rolesPermitidas Ex: 'admin', 'gestor', 'usuario'
+ */
+const autorizarRoles = (...rolesPermitidas) => {
+  return (req, res, next) => {
+    if (!req.usuario || !req.usuario.role) {
+      return res.status(403).json({ erro: 'Acesso negado: Perfil do usuário não identificado.' });
+    }
+
+    if (!rolesPermitidas.includes(req.usuario.role)) {
+      return res.status(403).json({
+        erro: `Acesso negado: Perfil '${req.usuario.role}' não possui permissão para esta ação.`
+      });
+    }
+
+    next();
+  };
+};
+
+module.exports = { autenticar, autorizarRoles };

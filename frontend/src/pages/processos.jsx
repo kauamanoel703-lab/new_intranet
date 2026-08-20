@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { listarProcessos, cadastrarProcesso, deletarProcesso } from '../services/api';
 
 // Máscaras de formatação
@@ -63,8 +63,8 @@ export default function Processos() {
   };
 
   const handleDocumentoChange = (valor) => {
-    const valorFormatado = form.tipoDocumento === 'CPF' 
-      ? mascararCPF(valor) 
+    const valorFormatado = form.tipoDocumento === 'CPF'
+      ? mascararCPF(valor)
       : mascararCNPJ(valor);
 
     setForm(prev => ({ ...prev, documento: valorFormatado }));
@@ -121,19 +121,19 @@ export default function Processos() {
         documento: '',
         descricao: ''
       });
-      
+
       setModalAberto(false);
       await buscarProcessos();
 
     } catch (err) {
       console.error('Erro na requisição:', err);
-      
+
       // Tentativa de ler mensagem do backend caso retorne JSON
       let msg = 'Campos obrigatórios do processo ausentes ou inválidos.';
       if (err?.response?.data?.mensagem) msg = err.response.data.mensagem;
       else if (err?.response?.data?.message) msg = err.response.data.message;
       else if (err?.response?.data?.erro) msg = err.response.data.erro;
-      
+
       setErro(msg);
     } finally {
       setCarregando(false);
@@ -157,7 +157,7 @@ export default function Processos() {
           <h1 style={{ fontSize: '24px', fontWeight: '700', margin: 0 }}>Acompanhamento de Processos</h1>
           <p style={{ color: '#94a3b8', fontSize: '14px', marginTop: '4px' }}>Gerencie as solicitações e trâmites mercantis da JUCEPE.</p>
         </div>
-        <button 
+        <button
           type="button"
           onClick={() => { setErro(''); setModalAberto(true); }}
           style={{ backgroundColor: '#0070f3', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}
@@ -207,7 +207,7 @@ export default function Processos() {
                       </span>
                     </td>
                     <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                      <button 
+                      <button
                         type="button"
                         onClick={() => handleExcluir(id)}
                         style={{ backgroundColor: 'transparent', color: '#f87171', border: 'none', cursor: 'pointer', fontSize: '13px' }}
@@ -240,7 +240,7 @@ export default function Processos() {
             <form onSubmit={handleSalvar}>
               <div style={{ marginBottom: '14px' }}>
                 <label style={{ display: 'block', fontSize: '13px', color: '#cbd5e1', marginBottom: '6px' }}>Razão Social / Nome da Empresa *</label>
-                <input 
+                <input
                   type="text"
                   required
                   value={form.razaoSocial}
@@ -252,7 +252,7 @@ export default function Processos() {
 
               <div style={{ marginBottom: '14px' }}>
                 <label style={{ display: 'block', fontSize: '13px', color: '#cbd5e1', marginBottom: '6px' }}>Tipo de Ato *</label>
-                <select 
+                <select
                   value={form.tipoAto}
                   onChange={(e) => setForm({ ...form, tipoAto: e.target.value })}
                   style={{ width: '100%', padding: '10px 12px', backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#fff', fontSize: '14px', boxSizing: 'border-box' }}
@@ -266,7 +266,7 @@ export default function Processos() {
 
               <div style={{ marginBottom: '14px' }}>
                 <label style={{ display: 'block', fontSize: '13px', color: '#cbd5e1', marginBottom: '6px' }}>Nome do Requerente *</label>
-                <input 
+                <input
                   type="text"
                   required
                   value={form.nomeRequerente}
@@ -279,7 +279,7 @@ export default function Processos() {
               <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '12px', marginBottom: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', color: '#cbd5e1', marginBottom: '6px' }}>Tipo Doc.</label>
-                  <select 
+                  <select
                     value={form.tipoDocumento}
                     onChange={(e) => handleTipoDocumentoChange(e.target.value)}
                     style={{ width: '100%', padding: '10px 10px', backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: '#fff', fontSize: '14px', boxSizing: 'border-box' }}
@@ -291,7 +291,7 @@ export default function Processos() {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', color: '#cbd5e1', marginBottom: '6px' }}>Número do {form.tipoDocumento}</label>
-                  <input 
+                  <input
                     type="text"
                     value={form.documento}
                     onChange={(e) => handleDocumentoChange(e.target.value)}
@@ -303,7 +303,7 @@ export default function Processos() {
 
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', fontSize: '13px', color: '#cbd5e1', marginBottom: '6px' }}>Observações / Descrição do Processo</label>
-                <textarea 
+                <textarea
                   rows={2}
                   value={form.descricao}
                   onChange={(e) => setForm({ ...form, descricao: e.target.value })}
@@ -313,15 +313,15 @@ export default function Processos() {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setModalAberto(false)}
                   disabled={carregando}
                   style={{ padding: '10px 18px', backgroundColor: '#334155', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}
                 >
                   Cancelar
                 </button>
-                <button 
+                <button
                   type="submit"
                   disabled={carregando}
                   style={{ padding: '10px 18px', backgroundColor: '#0070f3', color: '#fff', border: 'none', borderRadius: '6px', cursor: carregando ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '600' }}

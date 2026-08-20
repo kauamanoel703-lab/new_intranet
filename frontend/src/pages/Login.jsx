@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { loginUsuario } from '../services/api';
@@ -37,7 +37,7 @@ export default function Login() {
     try {
       const data = await loginUsuario({ email, senha });
 
-      // Ordem correta mantida: login(usuario, token)
+      // Salva os dados na sessão — login(usuario, token) conforme AuthContext
       if (typeof login === 'function') {
         login(data.usuario, data.token);
       }
@@ -53,7 +53,7 @@ export default function Login() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#090d16', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       <div style={{ width: '100%', maxWidth: '400px', padding: '32px', textAlign: 'center' }}>
-        
+
         {/* Identidade JUCEPE */}
         <h1 style={{ color: '#ffffff', fontSize: '26px', fontWeight: '700', marginBottom: '8px', letterSpacing: '-0.5px' }}>
           Portal JUCEPE
@@ -79,9 +79,9 @@ export default function Login() {
             <label htmlFor="email" style={{ display: 'block', color: '#f8fafc', fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>
               E-mail corporativo ou institucional
             </label>
-            <input 
+            <input
               id="email"
-              type="email" 
+              type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -95,7 +95,7 @@ export default function Login() {
               Senha de Acesso (6 dígitos)
             </label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <input 
+              <input
                 id="senha"
                 type={mostrarSenha ? "text" : "password"}
                 required
@@ -116,8 +116,8 @@ export default function Login() {
             </div>
           </div>
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={carregando}
             style={{ width: '100%', padding: '12px', backgroundColor: '#0070f3', color: '#ffffff', border: 'none', borderRadius: '6px', fontSize: '15px', fontWeight: '600', cursor: carregando ? 'wait' : 'pointer', transition: 'background-color 0.2s' }}
           >

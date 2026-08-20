@@ -1,28 +1,27 @@
 // ==================== CONFIGURAÇÃO INICIAL ====================
-require('dotenv').config(); // Carrega variáveis de ambiente do .env
+require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const mysql = require('mysql2/promise');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET || 'sua_chave_secreta_jucepe_2026';
 
 // ==================== MIDDLEWARES DE SEGURANÇA ====================
-
-// Helmet adiciona headers HTTP de segurança (XSS, clickjacking, etc.)
 app.use(helmet());
 
-// CORS com whitelist via .env (FRONTEND_ORIGIN pode ser lista separada por vírgula)
 const origensPermitidas = (process.env.FRONTEND_ORIGIN || 'http://localhost:5173')
   .split(',')
   .map(o => o.trim());
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Permite requests sem origin (mobile, Postman, curl) só em dev
     if (!origin && process.env.NODE_ENV !== 'production') {
       return callback(null, true);
     }
@@ -36,7 +35,18 @@ app.use(cors({
 
 app.use(express.json());
 
-// Rate limiter global: 100 req / 15 min por IP
+// Log de requisições
+app.use((req, res, next) => {
+  if (req.method !== 'GET') {
+    console.log(`\n[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+    const bodyLog = { ...req.body };
+    if (bodyLog.senha) bodyLog.senha = '***';
+    console.log('  Body recebido:', JSON.stringify(bodyLog, null, 2));
+  }
+  next();
+});
+
+// Rate limiters
 const limiterGeral = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -46,7 +56,6 @@ const limiterGeral = rateLimit({
 });
 app.use(limiterGeral);
 
-// Rate limiter específico para auth: 5 tentativas / 15 min por IP
 const limiterAuth = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
@@ -56,28 +65,26 @@ const limiterAuth = rateLimit({
 });
 
 // ==================== BANCO DE DADOS ====================
-
 const dbConfig = {
   host: process.env.DB_HOST || '127.0.0.1',
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'jucepe_db'
+  database: process.env.DB_NAME || 'intranet_jucepe'
 };
 
 let db;
 
 async function inicializarBanco() {
   try {
-    // Garante que o banco existe
     const conexaoInicial = await mysql.createConnection({
       host: dbConfig.host,
       user: dbConfig.user,
       password: dbConfig.password
     });
+    
     await conexaoInicial.query(`CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\`;`);
     await conexaoInicial.end();
 
-    // Conecta ao banco principal
     db = await mysql.createPool(dbConfig);
 
     // Tabela de Usuários
@@ -94,43 +101,20 @@ async function inicializarBanco() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
-    // Migração: adiciona colunas em tabelas criadas com schema antigo
-    try {
-      await db.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'usuario';`);
-    } catch (e) { /* coluna já existe em MySQL < 8 */ }
-
-    // Renomeia coluna 'senha' → 'senha_hash' se necessário
-    const [colsUsuarios] = await db.query(
-      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'usuarios'`,
-      [dbConfig.database]
-    );
-    const temSenha = colsUsuarios.some(c => c.COLUMN_NAME === 'senha');
-    const temSenhaHash = colsUsuarios.some(c => c.COLUMN_NAME === 'senha_hash');
-    if (temSenha && !temSenhaHash) {
-      await db.query(`ALTER TABLE usuarios CHANGE COLUMN senha senha_hash VARCHAR(255) NOT NULL;`);
-    }
-
-    const temCriadoEm = colsUsuarios.some(c => c.COLUMN_NAME === 'criado_em');
-    const temCreatedAt = colsUsuarios.some(c => c.COLUMN_NAME === 'created_at');
-    if (temCriadoEm && !temCreatedAt) {
-      await db.query(`ALTER TABLE usuarios CHANGE COLUMN criado_em created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
-    }
-
     // Tabela de Processos
     await db.query(`
       CREATE TABLE IF NOT EXISTS processos (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        numero_processo VARCHAR(50) NOT NULL,
-        requerente VARCHAR(100) NOT NULL,
+        numero VARCHAR(50) NOT NULL,
+        empresa VARCHAR(100) NOT NULL,
         tipo VARCHAR(50) NOT NULL,
-        status VARCHAR(30) DEFAULT 'Em Andamento',
-        descricao TEXT,
-        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        requerente VARCHAR(100) NOT NULL,
+        data DATE NOT NULL,
+        status VARCHAR(30) DEFAULT 'Em Análise'
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
-    // Tabela de Avisos (usada pelo Mural de Avisos do frontend)
+    // Tabela de Avisos
     await db.query(`
       CREATE TABLE IF NOT EXISTS avisos (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -143,26 +127,130 @@ async function inicializarBanco() {
     console.log('✅ Banco de dados e tabelas sincronizados com sucesso!');
   } catch (error) {
     console.error('❌ Erro ao inicializar o Banco de Dados:', error.message);
-    process.exit(1); // Falha rápida se o banco não inicializar
+    process.exit(1);
   }
+}
+
+// ==================== MIDDLEWARE DE AUTENTICAÇÃO ====================
+function autenticarToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) return res.status(401).json({ mensagem: 'Token de autenticação não fornecido.' });
+
+  jwt.verify(token, JWT_SECRET, (err, usuario) => {
+    if (err) return res.status(403).json({ mensagem: 'Token inválido ou expirado.' });
+    req.usuario = usuario;
+    next();
+  });
 }
 
 // ==================== ROTAS ====================
 
-// Aplica rate-limit específico nas rotas de auth
-const usuarioRoutes = require('./src/routes/usuarioRoutes');
-const processosRoutes = require('./src/routes/processosRoutes');
-const avisosRoutes = require('./src/routes/avisosRoutes');
+// Rota de Cadastro com Rate Limit de Auth
+app.post('/api/usuarios/cadastrar', limiterAuth, async (req, res) => {
+  const { nome, email, senha, cpf, telefone } = req.body;
 
-// Aplica rate-limit de auth nos endpoints públicos do usuarioRoutes
-app.use('/api/usuarios/cadastrar', limiterAuth);
-app.use('/api/usuarios/login', limiterAuth);
+  if (!nome || !email || !senha) {
+    return res.status(400).json({ mensagem: 'Preencha os campos obrigatórios.' });
+  }
 
-app.use('/api/usuarios', usuarioRoutes);
-app.use('/api/processos', processosRoutes);
-app.use('/api', avisosRoutes);
+  try {
+    const [usuarioExistente] = await db.query('SELECT id FROM usuarios WHERE email = ?', [email]);
+    if (usuarioExistente.length > 0) {
+      return res.status(400).json({ mensagem: 'E-mail já cadastrado.' });
+    }
 
-// Rota raiz só pra confirmar que está online
+    const senhaHash = await bcrypt.hash(senha, 10);
+
+    const [result] = await db.query(
+      'INSERT INTO usuarios (nome, email, senha_hash, cpf, telefone) VALUES (?, ?, ?, ?, ?)',
+      [nome.trim(), email.trim(), senhaHash, cpf || null, telefone || null]
+    );
+    res.status(201).json({ mensagem: 'Cadastrado com sucesso!', id: result.insertId });
+  } catch (error) {
+    console.error('❌ Erro no cadastro:', error);
+    res.status(500).json({ mensagem: 'Erro no servidor.' });
+  }
+});
+
+// Rota de Login com Rate Limit de Auth
+app.post('/api/usuarios/login', limiterAuth, async (req, res) => {
+  const { email, senha } = req.body;
+
+  if (!email || !senha) {
+    return res.status(400).json({ mensagem: 'Informe e-mail e senha.' });
+  }
+
+  try {
+    const [rows] = await db.query('SELECT * FROM usuarios WHERE email = ?', [String(email).trim()]);
+    if (rows.length === 0) {
+      return res.status(401).json({ mensagem: 'E-mail ou senha incorretos.' });
+    }
+
+    const usuario = rows[0];
+    const senhaValida = await bcrypt.compare(senha, usuario.senha_hash);
+
+    if (!senhaValida) {
+      return res.status(401).json({ mensagem: 'E-mail ou senha incorretos.' });
+    }
+
+    const token = jwt.sign({ id: usuario.id, nome: usuario.nome, email: usuario.email }, JWT_SECRET, { expiresIn: '8h' });
+    res.json({ mensagem: 'Login com sucesso!', token, usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email } });
+  } catch (error) {
+    console.error('❌ Erro no login:', error);
+    res.status(500).json({ mensagem: 'Erro no servidor.' });
+  }
+});
+
+// ==================== ROTAS DE PROCESSOS ====================
+
+// Listar Processos
+app.get('/api/processos', async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT * FROM processos ORDER BY id DESC');
+    res.json(rows);
+  } catch (error) {
+    console.error('❌ Erro ao listar processos:', error);
+    res.status(500).json({ mensagem: 'Erro ao buscar processos.' });
+  }
+});
+
+// Cadastrar Processo
+app.post('/api/processos', async (req, res) => {
+  const { numero, empresa, tipo, requerente, status } = req.body;
+
+  const numeroProtocolo = numero || `JUC-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+  const dataHoje = new Date().toISOString().split('T')[0];
+  const statusInicial = status || 'Em Análise';
+
+  if (!empresa || !tipo) {
+    return res.status(400).json({ mensagem: 'Informe a Empresa e o Tipo de Ato.' });
+  }
+
+  try {
+    const [result] = await db.query(
+      'INSERT INTO processos (numero, empresa, tipo, requerente, data, status) VALUES (?, ?, ?, ?, ?, ?)',
+      [numeroProtocolo, empresa, tipo, requerente || 'Usuário', dataHoje, statusInicial]
+    );
+
+    res.status(201).json({
+      mensagem: 'Processo cadastrado com sucesso!',
+      id: result.insertId,
+      numero: numeroProtocolo,
+      empresa,
+      tipo,
+      requerente: requerente || 'Usuário',
+      data: dataHoje,
+      status: statusInicial
+    });
+  } catch (error) {
+    console.error('❌ Erro ao cadastrar processo:', error);
+    res.status(500).json({ mensagem: 'Erro no servidor ao salvar processo.' });
+  }
+});
+
+// Rota raiz
 app.get('/', (req, res) => {
   res.json({ status: 'online', servico: 'Intranet JUCEPE API', versao: '1.0.0' });
 });
@@ -174,7 +262,6 @@ app.use((err, req, res, next) => {
 });
 
 // ==================== INICIALIZAÇÃO ====================
-
 app.listen(PORT, async () => {
   await inicializarBanco();
   console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);

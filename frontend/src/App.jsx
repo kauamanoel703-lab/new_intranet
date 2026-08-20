@@ -1,11 +1,11 @@
-﻿import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+﻿import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Usuarios from './pages/Usuarios';
 import Processos from './pages/processos';
+import DiretorioPessoas from './pages/DiretorioPessoas';
 
 // Rota Protegida (só entra se autenticado)
 const PrivateRoute = ({ children }) => {
@@ -43,47 +43,55 @@ function App() {
       <BrowserRouter>
         <Routes>
           {/* Rotas Públicas */}
-          <Route 
-            path="/login" 
+          <Route
+            path="/login"
             element={
               <PublicRoute>
                 <Login />
               </PublicRoute>
-            } 
+            }
           />
-          <Route 
-            path="/register" 
+          <Route
+            path="/register"
             element={
               <PublicRoute>
                 <Register />
               </PublicRoute>
-            } 
+            }
           />
-          
+
           {/* Rotas Protegidas */}
-          <Route 
-            path="/dashboard" 
+          <Route
+            path="/dashboard"
             element={
               <PrivateRoute>
                 <Dashboard />
               </PrivateRoute>
-            } 
+            }
           />
-          <Route 
-            path="/usuarios" 
+          <Route
+            path="/usuarios"
             element={
               <PrivateRoute>
                 <Usuarios />
               </PrivateRoute>
-            } 
+            }
           />
-          <Route 
-            path="/processos" 
+          <Route
+            path="/processos"
             element={
               <PrivateRoute>
                 <Processos />
               </PrivateRoute>
-            } 
+            }
+          />
+          <Route
+            path="/diretorio"
+            element={
+              <PrivateRoute>
+                <DiretorioPessoas />
+              </PrivateRoute>
+            }
           />
 
           {/* Redirecionamentos padrão */}
